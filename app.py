@@ -3,94 +3,20 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-import json
+from html import escape
 import os
 from pathlib import Path
 import re
 import uuid
+from urllib.parse import urlencode
 
-import dash
-from dash import Input, Output, State, dcc, html
-import dash_bootstrap_components as dbc
 import duckdb
+from flask import Flask, redirect, request
 import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent
 LOCAL_CSV_PATH = BASE_DIR / "projects.csv"
 DEFAULT_MOTHERDUCK_DB = "ai_lab_dashboard"
-
-# Notion scaffold
-# Uncomment and configure these when you're ready to pull KPI data from Notion.
-#
-# import os
-#
-# NOTION_API_VERSION = "2022-06-28"
-# NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID", "")
-# NOTION_TOKEN = os.getenv("NOTION_TOKEN", "")
-#
-# def fetch_notion_progress_by_project() -> dict[str, dict[str, str]]:
-#     """
-#     Expected return shape:
-#     {
-#         "BrandOS": {
-#             "Discovery": "Done",
-#             "Build": "In Progress",
-#             "Launch": "Blocked",
-#         }
-#     }
-#     """
-#     if not NOTION_DATABASE_ID or not NOTION_TOKEN:
-#         return {}
-#
-#     response = requests.post(
-#         f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query",
-#         headers={
-#             "Authorization": f"Bearer {NOTION_TOKEN}",
-#             "Notion-Version": NOTION_API_VERSION,
-#             "Content-Type": "application/json",
-#         },
-#         json={},
-#         timeout=20,
-#     )
-#     response.raise_for_status()
-#     payload = response.json()
-#
-#     project_progress = {}
-#     for result in payload.get("results", []):
-#         properties = result.get("properties", {})
-#
-#         # Adjust these property names to match your Notion database.
-#         project_name = (
-#             properties.get("Project", {})
-#             .get("title", [{}])[0]
-#             .get("plain_text", "")
-#         )
-#         discovery = (
-#             properties.get("Discovery KPI", {})
-#             .get("status", {})
-#             .get("name", "KPI Pending")
-#         )
-#         build = (
-#             properties.get("Build KPI", {})
-#             .get("status", {})
-#             .get("name", "KPI Pending")
-#         )
-#         launch = (
-#             properties.get("Launch KPI", {})
-#             .get("status", {})
-#             .get("name", "KPI Pending")
-#         )
-#
-#         if project_name:
-#             project_progress[project_name] = {
-#                 "Discovery": discovery,
-#                 "Build": build,
-#                 "Launch": launch,
-#             }
-#
-#     return project_progress
-#
-# NOTION_PROGRESS = fetch_notion_progress_by_project()
 
 COLUMN_MAP = {
     "Id": "id",
@@ -106,11 +32,11 @@ COLUMN_MAP = {
 }
 
 SUMMARY_OVERRIDES = {
-    16: "Stopping student clubs from wasting £380k on failed events via AI automation.",
+    16: "Stopping student clubs from wasting GBP380k on failed events via AI automation.",
     4: "Personalised AI career coaching and CRM for high-stakes MBA recruitment.",
     12: "An AI assistant that helps new students prioritize opportunities from day one.",
     9: "A WhatsApp AI assistant that unifies coursework, events, and career updates into one daily student briefing.",
-    10: "AI menu management for the cafeteria and a smarter EMS elective bidding system.",
+    10: "AI menu management for on campus food outlets.",
     15: "AI marketplace connecting researchers and students with global funding sources.",
     1: "A frictionless map app to end the confusion of finding rooms on campus.",
     5: "Upgrading the EMS experience with calendar planning and concentration tracking.",
@@ -127,15 +53,6 @@ COLORS = {
     "border": "#d8deea",
 }
 
-W = {
-    "project": "40%",
-    "lead_team": "16%",
-    "mentors": "12%",
-    "open_tasks": "8%",
-    "progress": "18%",
-    "action": "6%",
-}
-
 
 def clean_text(value: object) -> str:
     if pd.isna(value):
@@ -147,24 +64,12 @@ def quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
 
 
-def get_database_target() -> str:
-    token = clean_text(os.getenv("MOTHERDUCK_TOKEN", ""))
-    if not token:
-        raise RuntimeError("MOTHERDUCK_TOKEN is required. This app is configured for MotherDuck only.")
-    database_name = clean_text(
-        os.getenv("MOTHERDUCK_DB", DEFAULT_MOTHERDUCK_DB)
-    ) or DEFAULT_MOTHERDUCK_DB
-    return f"md:{database_name}?motherduck_token={token}"
-
-
 def connect_db(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     token = clean_text(os.getenv("MOTHERDUCK_TOKEN", ""))
     if not token:
-        raise RuntimeError("MOTHERDUCK_TOKEN is required. Set it in your environment or Render service settings.")
+        raise RuntimeError("MOTHERDUCK_TOKEN is required. This app is configured for MotherDuck only.")
 
-    database_name = clean_text(
-        os.getenv("MOTHERDUCK_DB", DEFAULT_MOTHERDUCK_DB)
-    ) or DEFAULT_MOTHERDUCK_DB
+    database_name = clean_text(os.getenv("MOTHERDUCK_DB", DEFAULT_MOTHERDUCK_DB)) or DEFAULT_MOTHERDUCK_DB
     conn = duckdb.connect(f"md:?motherduck_token={token}")
     if not read_only:
         conn.execute(f"CREATE DATABASE IF NOT EXISTS {quote_identifier(database_name)}")
@@ -178,20 +83,16 @@ def format_mentor_text(value: object) -> str:
 
 def extract_name_and_email(value: str) -> tuple[str, str]:
     text = clean_text(value)
-    email_match = re.search(
-        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", text
-    )
+    email_match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", text)
     email = email_match.group(0) if email_match else ""
     if not text:
         return "", email
-
     if email:
         name = text.replace(email, "")
         name = re.sub(r"[\s,:;]+$", "", name)
         name = re.sub(r"^[\s,:;]+", "", name)
         name = re.sub(r"\s{2,}", " ", name).strip()
         return name, email
-
     return text, ""
 
 
@@ -199,62 +100,36 @@ def summarize_problem(text: str, limit: int = 125) -> str:
     cleaned = re.sub(r"\s+", " ", clean_text(text))
     if not cleaned:
         return "No summary provided."
-
     first_sentence = re.split(r"(?<=[.!?])\s+", cleaned, maxsplit=1)[0].strip()
     candidate = first_sentence or cleaned
-
-    # Compress long opening sentences into a tighter one-line preview.
     for separator in [": ", " - ", " — ", ", but ", ", with ", ", due to ", ", resulting in "]:
         if separator in candidate:
             candidate = candidate.split(separator, 1)[0].strip()
             break
-
-    replacements = [
-        (r"^I want to\s+", ""),
-        (r"^We want to\s+", ""),
-        (r"^The idea is to build\s+", ""),
-        (r"^The idea is to create\s+", ""),
-        (r"^We are building\s+", ""),
-        (r"^We're building\s+", ""),
-        (r"^It'?s not necessarily LBS focused, we're building\s+", ""),
-    ]
-    for pattern, replacement in replacements:
-        candidate = re.sub(pattern, replacement, candidate, flags=re.IGNORECASE).strip()
-
-    if candidate:
-        candidate = candidate[0].upper() + candidate[1:]
-
     if len(candidate) <= limit:
         return candidate if re.search(r"[.!?]$", candidate) else f"{candidate}."
-
-    truncated = candidate[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-")
-    return f"{truncated}..."
+    return f"{candidate[:limit].rsplit(' ', 1)[0].rstrip(' ,;:-')}..."
 
 
 def summarize_interaction_content(text: str, limit: int = 110) -> str:
     cleaned = clean_text(text)
     if not cleaned:
         return "Empty interaction."
-
     subject_match = re.search(r"^Subject:\s*(.+)$", cleaned, flags=re.IGNORECASE | re.MULTILINE)
     if subject_match:
         summary = subject_match.group(1).strip()
     else:
         flattened = re.sub(r"\s+", " ", cleaned)
         summary = re.split(r"(?<=[.!?])\s+", flattened, maxsplit=1)[0].strip()
-
     if len(summary) <= limit:
         return summary if re.search(r"[.!?]$", summary) else f"{summary}."
-
-    trimmed = summary[:limit].rsplit(" ", 1)[0].rstrip(" ,;:-")
-    return f"{trimmed}..."
+    return f"{summary[:limit].rsplit(' ', 1)[0].rstrip(' ,;:-')}..."
 
 
 def clean_interaction_content(text: str) -> str:
     cleaned = clean_text(text)
     if not cleaned:
         return ""
-
     artifact_patterns = [
         r"^Graphical user interface, text, application\s*$",
         r"^Description automatically generated\s*$",
@@ -271,22 +146,18 @@ def clean_interaction_content(text: str) -> str:
             continue
         cleaned_lines.append(line)
 
-    # Detect when the clipboard payload contains the email body twice and truncate the duplicate tail.
     significant_lines = [line for line in cleaned_lines if line]
     duplicate_start = None
-    min_anchor_length = 12
     for current_index in range(4, len(significant_lines) - 3):
         current_line = significant_lines[current_index]
-        if len(current_line) < min_anchor_length:
+        if len(current_line) < 12:
             continue
         for previous_index in range(0, current_index - 2):
             if significant_lines[previous_index] != current_line:
                 continue
-
             window = min(6, len(significant_lines) - current_index, len(significant_lines) - previous_index)
             if window < 3:
                 continue
-
             matches = sum(
                 1
                 for offset in range(window)
@@ -297,7 +168,6 @@ def clean_interaction_content(text: str) -> str:
                 break
         if duplicate_start:
             break
-
     if duplicate_start:
         seen_anchor = False
         deduped_lines: list[str] = []
@@ -309,14 +179,12 @@ def clean_interaction_content(text: str) -> str:
             deduped_lines.append(line)
         cleaned_lines = deduped_lines
 
-    # Fallback for clipboard pastes that restart the body with the same greeting/opening.
     greeting_prefixes = ("hi ", "hello ", "dear ")
     non_empty_lines = [line for line in cleaned_lines if line]
     duplicate_restart = None
     for current_index in range(1, len(non_empty_lines) - 1):
         current_line = non_empty_lines[current_index]
-        lowered = current_line.lower()
-        if not lowered.startswith(greeting_prefixes):
+        if not current_line.lower().startswith(greeting_prefixes):
             continue
         for previous_index in range(current_index):
             if non_empty_lines[previous_index] != current_line:
@@ -332,7 +200,6 @@ def clean_interaction_content(text: str) -> str:
                 break
         if duplicate_restart:
             break
-
     if duplicate_restart:
         seen_restart = False
         trimmed_lines: list[str] = []
@@ -344,7 +211,6 @@ def clean_interaction_content(text: str) -> str:
             trimmed_lines.append(line)
         cleaned_lines = trimmed_lines
 
-    # Remove trailing standalone sender-name lines left behind by Outlook-style clipboard exports.
     while cleaned_lines:
         last_line = cleaned_lines[-1]
         if not last_line:
@@ -355,7 +221,6 @@ def clean_interaction_content(text: str) -> str:
             continue
         break
 
-    # Collapse runaway blank lines after cleanup.
     normalized_lines: list[str] = []
     blank_streak = 0
     for line in cleaned_lines:
@@ -366,7 +231,6 @@ def clean_interaction_content(text: str) -> str:
         else:
             blank_streak = 0
         normalized_lines.append(line)
-
     return "\n".join(normalized_lines).strip()
 
 
@@ -374,16 +238,10 @@ def extract_tasks_from_interaction(text: str) -> list[str]:
     cleaned = clean_interaction_content(text)
     if not cleaned:
         return []
-
     tasks: list[str] = []
     seen: set[str] = set()
     content_lines: list[str] = []
     heading_context: str | None = None
-    skip_exact_lines = {
-        "hi kostis!",
-        "best,",
-        "matt",
-    }
 
     def add_task(candidate: str) -> None:
         task = re.sub(r"\s+", " ", candidate).strip(" -:*")
@@ -400,33 +258,18 @@ def extract_tasks_from_interaction(text: str) -> list[str]:
         if not words or len(words) > 5:
             return False
         lowered = line.lower()
-        return (
-            line.isupper()
-            or " and " in lowered
-            or " team" in lowered
-            or lowered.endswith(" team")
-        )
+        return line.isupper() or " and " in lowered or " team" in lowered or lowered.endswith(" team")
 
     for line in cleaned.splitlines():
         stripped = line.strip()
         if not stripped:
             heading_context = None
             continue
-
         if re.match(r"^(from|to|cc|bcc|subject|date|sent):", stripped, flags=re.IGNORECASE):
             continue
-
-        if stripped.lower() in skip_exact_lines:
-            continue
-
         bullet_match = re.match(r"^[-*•]\s+(.+)$", stripped)
         numbered_match = re.match(r"^\d+[.)]\s+(.+)$", stripped)
-        action_match = re.match(
-            r"^(?:todo|to do|action item|next step|next steps)[:\-]?\s*(.+)$",
-            stripped,
-            flags=re.IGNORECASE,
-        )
-
+        action_match = re.match(r"^(?:todo|to do|action item|next step|next steps)[:\-]?\s*(.+)$", stripped, flags=re.IGNORECASE)
         if bullet_match:
             add_task(bullet_match.group(1))
             continue
@@ -436,74 +279,28 @@ def extract_tasks_from_interaction(text: str) -> list[str]:
         if action_match and action_match.group(1):
             add_task(action_match.group(1))
             continue
-
         if is_heading(stripped):
             heading_context = stripped
             continue
-
-        if (
-            heading_context
-            and len(stripped) < 120
-            and not re.search(r"[.!?]$", stripped)
-        ):
+        if heading_context and len(stripped) < 120 and not re.search(r"[.!?]$", stripped):
             add_task(f"{heading_context}: {stripped}")
             continue
-
         content_lines.append(stripped)
 
     flattened = re.sub(r"\s+", " ", " ".join(content_lines))
     for sentence in re.split(r"(?<=[.!?])\s+", flattened):
-        sentence = sentence.strip()
-        if not sentence:
+        lowered = sentence.lower().strip()
+        if not lowered:
             continue
-        lowered = sentence.lower()
-        if any(
-            lowered.startswith(prefix)
-            for prefix in [
-                "i hope ",
-                "as i mentioned during",
-                "at this stage, i’m thinking",
-                "at this stage, i'm thinking",
-                "thank you ",
-                "looking forward ",
-                "if the last one ",
-                "best,",
-            ]
-        ):
+        if any(lowered.startswith(prefix) for prefix in ["i hope ", "thank you ", "best,"]):
             continue
-        if any(
-            phrase in lowered
-            for phrase in [
-                "need help with",
-                "need to talk to",
-                "would need to",
-                "talk to people from",
-            ]
-        ):
+        if any(phrase in lowered for phrase in ["need to ", "needs to ", "please ", "follow up", "action item", "next step", "todo"]):
             add_task(sentence)
-            continue
-        if any(
-            phrase in lowered
-            for phrase in [
-                "need to ",
-                "needs to ",
-                "please ",
-                "follow up",
-                "action item",
-                "next step",
-                "todo",
-            ]
-        ):
-            add_task(sentence)
-
     return tasks
 
 
 def extract_interaction_timestamp(text: str) -> datetime:
     cleaned = clean_text(text)
-    if not cleaned:
-        return datetime.now()
-
     for line in cleaned.splitlines():
         if ":" not in line:
             continue
@@ -518,43 +315,28 @@ def extract_interaction_timestamp(text: str) -> datetime:
                 return parsed
         except (TypeError, ValueError, IndexError):
             continue
-
     return datetime.now()
 
 
 def parse_team_details(lead_email: str, raw_members: str) -> tuple[list[str], str]:
     all_text = f"{clean_text(lead_email)} {clean_text(raw_members)}"
-    email_matches = re.findall(
-        r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", all_text
-    )
-    emails = sorted(set(email_matches))
-
+    emails = sorted(set(re.findall(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", all_text)))
     degrees = []
     for email in emails:
         match = re.search(r"\.([a-zA-Z]+)(\d{4})@", email)
         if match:
             degrees.append(match.group(1).upper())
-
     counts = Counter(degrees)
     composition = ", ".join(f"{count} {degree}" for degree, count in counts.items())
     return emails, composition or "1 LBS"
 
 
-def load_local_dataframe() -> pd.DataFrame:
+def load_projects_df() -> pd.DataFrame:
     raw_df = pd.read_csv(LOCAL_CSV_PATH).fillna("")
     df = raw_df.rename(columns=COLUMN_MAP)
-
-    missing_columns = [value for value in COLUMN_MAP.values() if value not in df.columns]
-    if missing_columns:
-        raise ValueError(
-            "Missing expected columns in Google Sheet: "
-            + ", ".join(sorted(missing_columns))
-        )
-
     df["id"] = pd.to_numeric(df["id"], errors="coerce")
     df = df.dropna(subset=["id"]).copy()
     df["id"] = df["id"].astype(int)
-
     lead_details = df["lead_raw"].apply(extract_name_and_email)
     df["lead"] = lead_details.str[0].replace("", pd.NA).fillna(df["submitter_name"])
     df["lead_email"] = lead_details.str[1].replace("", pd.NA).fillna(df["submitter_email"])
@@ -562,21 +344,10 @@ def load_local_dataframe() -> pd.DataFrame:
     df["summary"] = df["id"].map(SUMMARY_OVERRIDES)
     df["summary"] = df["summary"].fillna(df["full_problem"].apply(summarize_problem))
     df = df[~df["id"].isin(EXCLUDED_PROJECT_IDS)].copy()
-
-    team_details = df.apply(
-        lambda row: parse_team_details(row["lead_email"], row["raw_members"]), axis=1
-    )
+    team_details = df.apply(lambda row: parse_team_details(row["lead_email"], row["raw_members"]), axis=1)
     df["all_emails"] = team_details.str[0]
     df["team_composition"] = team_details.str[1]
-
     return df.sort_values(by="name").reset_index(drop=True)
-
-
-def load_projects() -> tuple[pd.DataFrame, str | None]:
-    try:
-        return load_local_dataframe(), None
-    except Exception as exc:  # noqa: BLE001
-        return pd.DataFrame(), str(exc)
 
 
 def initialize_database(projects_df: pd.DataFrame) -> None:
@@ -602,12 +373,26 @@ def initialize_database(projects_df: pd.DataFrame) -> None:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS interactions (
+                interaction_id VARCHAR,
                 project_id INTEGER NOT NULL,
                 interaction_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 content VARCHAR NOT NULL
             )
             """
         )
+        interaction_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info('interactions')").fetchall()
+        }
+        if "interaction_id" not in interaction_columns:
+            conn.execute("ALTER TABLE interactions ADD COLUMN interaction_id VARCHAR")
+            existing_rows = conn.execute(
+                "SELECT rowid FROM interactions WHERE interaction_id IS NULL"
+            ).fetchall()
+            for (row_id,) in existing_rows:
+                conn.execute(
+                    "UPDATE interactions SET interaction_id = ? WHERE rowid = ?",
+                    [str(uuid.uuid4()), row_id],
+                )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS tasks (
@@ -622,27 +407,7 @@ def initialize_database(projects_df: pd.DataFrame) -> None:
             )
             """
         )
-        task_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info('tasks')").fetchall()
-        }
-        if "task_id" not in task_columns:
-            conn.execute("ALTER TABLE tasks ADD COLUMN task_id VARCHAR")
-            existing_rows = conn.execute(
-                "SELECT rowid FROM tasks WHERE task_id IS NULL"
-            ).fetchall()
-            for (row_id,) in existing_rows:
-                conn.execute(
-                    "UPDATE tasks SET task_id = ? WHERE rowid = ?",
-                    [str(uuid.uuid4()), row_id],
-                )
-        if "comments" not in task_columns:
-            conn.execute("ALTER TABLE tasks ADD COLUMN comments VARCHAR")
-        if "updated_at" not in task_columns:
-            conn.execute("ALTER TABLE tasks ADD COLUMN updated_at TIMESTAMP")
-        if "completed_at" not in task_columns:
-            conn.execute("ALTER TABLE tasks ADD COLUMN completed_at TIMESTAMP")
         conn.execute("DELETE FROM projects")
-
         rows = [
             (
                 int(row["id"]),
@@ -664,171 +429,78 @@ def initialize_database(projects_df: pd.DataFrame) -> None:
             conn.executemany(
                 """
                 INSERT INTO projects (
-                    id,
-                    name,
-                    lead,
-                    lead_email,
-                    raw_members,
-                    summary,
-                    full_problem,
-                    full_success,
-                    support,
-                    mentor,
-                    team_composition,
-                    all_emails_json
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, name, lead, lead_email, raw_members, summary,
+                    full_problem, full_success, support, mentor,
+                    team_composition, all_emails_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
+
+
+def fetch_projects() -> list[dict[str, object]]:
+    projects_df = load_projects_df()
+    initialize_database(projects_df)
+    counts = fetch_open_task_counts()
+    records = projects_df.to_dict("records")
+    for record in records:
+        record["open_task_count"] = counts.get(int(record["id"]), 0)
+    return records
+
+
+def fetch_project(project_id: int) -> dict[str, object] | None:
+    for record in fetch_projects():
+        if int(record["id"]) == project_id:
+            return record
+    return None
 
 
 def fetch_project_interactions(project_id: int) -> list[dict[str, str]]:
     with connect_db(read_only=True) as conn:
         rows = conn.execute(
             """
-            SELECT interaction_timestamp, content
+            SELECT interaction_id, interaction_timestamp, content
             FROM interactions
             WHERE project_id = ?
             ORDER BY interaction_timestamp DESC
             """,
             [project_id],
         ).fetchall()
-
     return [
         {
-            "timestamp": (
-                timestamp.strftime("%d %b %Y, %H:%M")
-                if isinstance(timestamp, datetime)
-                else str(timestamp)
-            ),
+            "interaction_id": interaction_id,
+            "timestamp": timestamp.strftime("%d %b %Y, %H:%M") if isinstance(timestamp, datetime) else str(timestamp),
             "summary": summarize_interaction_content(content),
             "content": content,
         }
-        for timestamp, content in rows
+        for interaction_id, timestamp, content in rows
     ]
 
 
-def add_interaction(project_id: int, content: str) -> None:
-    interaction_timestamp = extract_interaction_timestamp(content)
-    cleaned_content = clean_interaction_content(content)
-    extracted_tasks = extract_tasks_from_interaction(cleaned_content)
-    with connect_db() as conn:
-        conn.execute(
-            """
-            INSERT INTO interactions (project_id, interaction_timestamp, content)
-            VALUES (?, ?, ?)
-            """,
-            [project_id, interaction_timestamp, cleaned_content],
-        )
-        if extracted_tasks:
-            conn.executemany(
-                """
-                INSERT INTO tasks (
-                    task_id,
-                    project_id,
-                    source_timestamp,
-                    description,
-                    status,
-                    comments,
-                    updated_at,
-                    completed_at
-                )
-                VALUES (?, ?, ?, ?, 'open', '', ?, NULL)
-                """,
-                [
-                    (
-                        str(uuid.uuid4()),
-                        project_id,
-                        interaction_timestamp,
-                        task,
-                        interaction_timestamp,
-                    )
-                    for task in extracted_tasks
-                ],
-            )
-
-
-def fetch_project_tasks(project_id: int) -> list[dict[str, str | None]]:
+def fetch_project_tasks(project_id: int, status_filter: str | None = None) -> list[dict[str, str]]:
+    query = """
+        SELECT task_id, source_timestamp, description, status, comments, completed_at
+        FROM tasks
+        WHERE project_id = ?
+    """
+    params: list[object] = [project_id]
+    if status_filter:
+        query += " AND status = ?"
+        params.append(status_filter)
+    query += " ORDER BY source_timestamp DESC, description ASC"
     with connect_db(read_only=True) as conn:
-        rows = conn.execute(
-            """
-            SELECT task_id, source_timestamp, description, status, comments, completed_at
-            FROM tasks
-            WHERE project_id = ?
-              AND status = 'open'
-            ORDER BY source_timestamp DESC, description ASC
-            """,
-            [project_id],
-        ).fetchall()
-
+        rows = conn.execute(query, params).fetchall()
     return [
         {
             "task_id": task_id,
-            "raw_timestamp": (
-                timestamp.isoformat(sep=" ")
-                if isinstance(timestamp, datetime)
-                else str(timestamp)
-            ),
-            "timestamp": (
-                timestamp.strftime("%d %b %Y, %H:%M")
-                if isinstance(timestamp, datetime)
-                else str(timestamp)
-            ),
+            "timestamp": timestamp.strftime("%d %b %Y, %H:%M") if isinstance(timestamp, datetime) else str(timestamp),
             "description": description,
             "status": status,
             "comments": comments or "",
-            "completed_timestamp": (
-                completed_at.strftime("%d %b %Y, %H:%M")
-                if isinstance(completed_at, datetime)
-                else ""
-            ),
+            "completed_timestamp": completed_at.strftime("%d %b %Y, %H:%M") if isinstance(completed_at, datetime) else "",
         }
         for task_id, timestamp, description, status, comments, completed_at in rows
     ]
-
-
-def delete_task(task_id: str) -> None:
-    with connect_db() as conn:
-        conn.execute("DELETE FROM tasks WHERE task_id = ?", [task_id])
-
-
-def update_task(task_id: str, status: str, comments: str) -> None:
-    now = datetime.now()
-    completed_at = now if status == "done" else None
-    with connect_db() as conn:
-        conn.execute(
-            """
-            UPDATE tasks
-            SET status = ?,
-                comments = ?,
-                updated_at = ?,
-                completed_at = ?
-            WHERE task_id = ?
-            """,
-            [status, comments, now, completed_at, task_id],
-        )
-
-
-def add_manual_task(project_id: int, description: str, comments: str = "") -> None:
-    now = datetime.now()
-    with connect_db() as conn:
-        conn.execute(
-            """
-            INSERT INTO tasks (
-                task_id,
-                project_id,
-                source_timestamp,
-                description,
-                status,
-                comments,
-                updated_at,
-                completed_at
-            )
-            VALUES (?, ?, ?, ?, 'open', ?, ?, NULL)
-            """,
-            [str(uuid.uuid4()), project_id, now, description, comments, now],
-        )
 
 
 def fetch_open_task_counts() -> dict[int, int]:
@@ -841,1163 +513,378 @@ def fetch_open_task_counts() -> dict[int, int]:
             GROUP BY project_id
             """
         ).fetchall()
-
     return {int(project_id): int(count) for project_id, count in rows}
 
 
-def render_interaction_history_items(items: list[dict[str, str]]) -> html.Div | html.P:
-    if not items:
-        return html.P("No interactions recorded yet.", className="text-muted mb-0")
-
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Small(
-                        item["timestamp"],
-                        className="text-muted d-block",
-                    ),
-                    html.P(
-                        item["summary"],
-                        className="mb-3",
-                        style={
-                            "fontSize": "0.88rem",
-                            "whiteSpace": "pre-wrap",
-                        },
-                    ),
-                ]
-            )
-            for item in items
-        ]
-    )
-
-
-def render_raw_interaction_view(item: dict[str, str] | None) -> html.Div | html.P:
-    if item is None:
-        return html.Div(
-            [
-                html.Div(
-                    [
-                        html.Small("", className="text-muted d-block"),
-                        dbc.Button(
-                            "Close",
-                            id="close-interaction-view",
-                            color="link",
-                            size="sm",
-                            className="p-0 text-decoration-none",
-                            style={
-                                "fontSize": "0.8rem",
-                                "visibility": "hidden",
-                            },
-                            disabled=True,
-                        ),
-                    ],
-                    className="d-flex justify-content-between align-items-center mb-2",
-                ),
-                html.P(
-                    "Click an interaction to view the full raw content.",
-                    className="text-muted mb-0",
-                ),
-            ]
+def add_interaction(project_id: int, content: str) -> None:
+    interaction_timestamp = extract_interaction_timestamp(content)
+    cleaned_content = clean_interaction_content(content)
+    extracted_tasks = extract_tasks_from_interaction(cleaned_content)
+    with connect_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO interactions (interaction_id, project_id, interaction_timestamp, content)
+            VALUES (?, ?, ?, ?)
+            """,
+            [str(uuid.uuid4()), project_id, interaction_timestamp, cleaned_content],
         )
-
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Small(item["timestamp"], className="text-muted d-block"),
-                    dbc.Button(
-                        "Close",
-                        id="close-interaction-view",
-                        color="link",
-                        size="sm",
-                        className="p-0 text-decoration-none",
-                        style={"fontSize": "0.8rem"},
-                    ),
-                ],
-                className="d-flex justify-content-between align-items-center mb-2",
-            ),
-            html.Pre(
-                item["content"],
-                className="mb-0",
-                style={
-                    "whiteSpace": "pre-wrap",
-                    "fontSize": "0.82rem",
-                    "fontFamily": "inherit",
-                },
-            ),
-        ]
-    )
-
-
-def render_task_editor(task: dict[str, str | None] | None) -> html.Div:
-    is_empty = task is None
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.H6(
-                        "Task Details",
-                        className="mb-0",
-                        style={"color": COLORS["primary"], "fontWeight": "700"},
-                    ),
-                    dbc.Button(
-                        "Close",
-                        id="close-task-editor",
-                        color="link",
-                        size="sm",
-                        className="p-0 text-decoration-none",
-                        style={
-                            "fontSize": "0.8rem",
-                            "visibility": "hidden" if is_empty else "visible",
-                        },
-                        disabled=is_empty,
-                    ),
-                ],
-                className="d-flex justify-content-between align-items-center mb-3",
-            ),
-            html.Div(
-                task["description"] if task else "Click a task to manage its status and comments.",
-                id="task-editor-description",
-                className="mb-3",
-                style={
-                    "fontSize": "0.9rem",
-                    "color": COLORS["primary"] if task else COLORS["muted"],
-                    "fontWeight": "600" if task else "400",
-                },
-            ),
-            dbc.Row(
-                [
-                    dbc.Col(
-                        [
-                            html.Small("Date Opened", className="text-muted d-block"),
-                            html.Div(
-                                task["timestamp"] if task else "-",
-                                id="task-editor-opened",
-                                style={"fontSize": "0.84rem"},
-                            ),
-                        ],
-                        width=4,
-                    ),
-                    dbc.Col(
-                        [
-                            html.Small("Date Completed", className="text-muted d-block"),
-                            html.Div(
-                                task["completed_timestamp"] if task and task["completed_timestamp"] else "-",
-                                id="task-editor-completed",
-                                style={"fontSize": "0.84rem"},
-                            ),
-                        ],
-                        width=4,
-                    ),
-                    dbc.Col(
-                        [
-                            html.Small("Status", className="text-muted d-block"),
-                            dbc.Select(
-                                id="task-editor-status",
-                                options=[
-                                    {"label": "Open", "value": "open"},
-                                    {"label": "In Progress", "value": "in_progress"},
-                                    {"label": "Blocked", "value": "blocked"},
-                                    {"label": "Done", "value": "done"},
-                                ],
-                                value=task["status"] if task else "open",
-                                disabled=is_empty,
-                                size="sm",
-                            ),
-                        ],
-                        width=4,
-                    ),
-                ],
-                className="g-3 mb-3",
-            ),
-            html.Small("Comments", className="text-muted d-block"),
-            dbc.Textarea(
-                id="task-editor-comments",
-                value=task["comments"] if task else "",
-                placeholder="Add notes, blockers, or follow-up comments...",
-                disabled=is_empty,
-                style={"minHeight": "100px", "fontSize": "0.85rem"},
-                className="mb-3",
-            ),
-            html.Div(
-                [
-                    dbc.Button(
-                        "Save",
-                        id="save-task-btn",
-                        color="primary",
-                        size="sm",
-                        disabled=is_empty,
-                    ),
-                    dbc.Button(
-                        "Delete",
-                        id="delete-task-btn",
-                        color="link",
-                        size="sm",
-                        className="text-danger text-decoration-none",
-                        disabled=is_empty,
-                    ),
-                ],
-                className="d-flex gap-2 align-items-center",
-            ),
-        ]
-    )
-
-
-def render_tasks_table(items: list[dict[str, str]]) -> html.Div | html.P:
-    table_or_empty = (
-        html.P(
-            "No open tasks detected from interactions yet.",
-            className="text-muted mb-3",
-        )
-        if not items
-        else dbc.Table(
-            [
-                html.Thead(
-                    html.Tr(
-                        [
-                            html.Th("Task"),
-                            html.Th("Date Opened", style={"width": "18%"}),
-                            html.Th("Status", style={"width": "12%"}),
-                            html.Th("Date Completed", style={"width": "18%"}),
-                            html.Th("", style={"width": "10%"}),
-                        ]
-                    )
-                ),
-                html.Tbody(
-                    [
-                        html.Tr(
-                            [
-                                html.Td(
-                                    item["description"],
-                                    style={"fontSize": "0.85rem"},
-                                ),
-                                html.Td(
-                                    item["timestamp"],
-                                    style={
-                                        "fontSize": "0.8rem",
-                                        "color": COLORS["muted"],
-                                        "whiteSpace": "nowrap",
-                                    },
-                                ),
-                                html.Td(
-                                    item["status"].replace("_", " ").title(),
-                                    style={
-                                        "fontSize": "0.8rem",
-                                        "color": COLORS["muted"],
-                                        "whiteSpace": "nowrap",
-                                    },
-                                ),
-                                html.Td(
-                                    item["completed_timestamp"] or "-",
-                                    style={
-                                        "fontSize": "0.8rem",
-                                        "color": COLORS["muted"],
-                                        "whiteSpace": "nowrap",
-                                    },
-                                ),
-                                html.Td(
-                                    dbc.Button(
-                                        "Manage",
-                                        id={"type": "task-row", "index": idx},
-                                        color="link",
-                                        size="sm",
-                                        className="p-0 text-decoration-none",
-                                        style={"fontSize": "0.82rem"},
-                                    ),
-                                    className="text-end",
-                                ),
-                            ]
-                        )
-                        for idx, item in enumerate(items)
-                    ]
-                ),
-            ],
-            bordered=False,
-            hover=True,
-            responsive=True,
-            size="sm",
-            className="mb-2 bg-white shadow-sm rounded",
-            style={"overflow": "hidden"},
-        )
-    )
-
-    return html.Div(
-        [
-            table_or_empty,
-            html.Div(
-                id="task-editor-view",
-                children=render_task_editor(None),
-                className="bg-white border rounded shadow-sm p-3",
-            ),
-        ]
-    )
-
-
-def render_interactions_table(items: list[dict[str, str]]) -> html.Div | html.P:
-    table_or_empty = (
-        html.P("No interactions recorded yet.", className="text-muted mb-3")
-        if not items
-        else dbc.Table(
-            [
-                html.Thead(
-                    html.Tr(
-                        [
-                            html.Th("Date", style={"width": "26%"}),
-                            html.Th("Summary"),
-                        ]
-                    )
-                ),
-                html.Tbody(
-                    [
-                        html.Tr(
-                            [
-                                html.Td(
-                                    item["timestamp"],
-                                    style={
-                                        "fontSize": "0.8rem",
-                                        "color": COLORS["muted"],
-                                        "whiteSpace": "nowrap",
-                                    },
-                                ),
-                                html.Td(
-                                    dbc.Button(
-                                        item["summary"],
-                                        id={"type": "interaction-row", "index": idx},
-                                        color="link",
-                                        className="p-0 text-start text-decoration-none",
-                                        style={
-                                            "fontSize": "0.86rem",
-                                            "lineHeight": "1.35",
-                                            "color": COLORS["primary"],
-                                        },
-                                    )
-                                ),
-                            ]
-                        )
-                        for idx, item in enumerate(items)
-                    ]
-                ),
-            ],
-            bordered=False,
-            hover=True,
-            responsive=True,
-            size="sm",
-            className="mb-3 bg-white shadow-sm rounded",
-            style={"overflow": "hidden"},
-        )
-    )
-
-    return html.Div(
-        [
-            table_or_empty,
-            html.Div(
-                id="interaction-raw-view",
-                children=render_raw_interaction_view(None),
-                className="bg-white border rounded shadow-sm p-3",
-            ),
-        ],
-    )
-
-
-PROJECTS_DF, DATA_ERROR = load_projects()
-if DATA_ERROR is None and os.getenv("SKIP_DB_INIT") != "1":
-    initialize_database(PROJECTS_DF)
-
-app = dash.Dash(
-    __name__,
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
-    suppress_callback_exceptions=True,
-)
-server = app.server
-
-
-def make_task_mini_bar(label: str, value: str, progress: int = 8) -> html.Div:
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Small(label, style={"font-size": "0.56rem", "color": COLORS["muted"]}),
-                    html.Small(
-                        value,
-                        style={
-                            "font-size": "0.54rem",
-                            "font-weight": "700",
-                            "color": COLORS["primary"],
-                        },
-                    ),
-                ],
-                className="d-flex justify-content-between",
-            ),
-            dbc.Progress(value=progress, color="info", style={"height": "3px"}),
-        ],
-        style={"margin-bottom": "3px"},
-    )
-
-
-def get_progress_items(row: pd.Series) -> list[tuple[str, str, int]]:
-    # Swap these placeholders for NOTION_PROGRESS[row["name"]] once the API scaffold
-    # above is enabled and your KPI fields are mapped.
-    return [
-        ("Discovery", "KPI Pending", 10),
-        ("Build", "KPI Pending", 10),
-        ("Launch", "KPI Pending", 10),
-    ]
-
-
-def make_project_row(row: pd.Series, open_task_counts: dict[int, int]) -> html.Div:
-    open_task_count = open_task_counts.get(int(row["id"]), 0)
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.H6(
-                        row["name"],
-                        style={
-                            "font-weight": "700",
-                            "margin-bottom": "0.15rem",
-                            "color": COLORS["primary"],
-                        },
-                    ),
-                    html.P(
-                        row["summary"],
-                        style={
-                            "font-size": "0.74rem",
-                            "margin-bottom": "0",
-                            "color": COLORS["muted"],
-                            "line-height": "1.3",
-                        },
-                    ),
-                ],
-                style={"width": W["project"], "padding-right": "12px"},
-            ),
-            html.Div(
-                [
-                    html.Small(
-                        row["lead"],
-                        style={
-                            "font-weight": "700",
-                            "display": "block",
-                            "font-size": "0.74rem",
-                            "line-height": "1.2",
-                            "margin-bottom": "4px",
-                        },
-                    ),
-                    dbc.Badge(
-                        row["team_composition"],
-                        color="light",
-                        text_color="dark",
-                        style={
-                            "font-size": "0.58rem",
-                            "border": f"1px solid {COLORS['border']}",
-                        },
-                    ),
-                ],
-                style={"width": W["lead_team"], "padding-right": "10px"},
-            ),
-            html.Div(
-                html.Small(
-                    row["mentor"],
-                    style={
-                        "font-size": "0.68rem",
-                        "color": COLORS["primary"],
-                        "white-space": "pre-wrap",
-                        "line-height": "1.15",
-                    },
-                ),
-                style={"width": W["mentors"], "padding-right": "10px"},
-            ),
-            html.Div(
-                dbc.Badge(
-                    str(open_task_count),
-                    color="light",
-                    text_color="dark",
-                    style={
-                        "font-size": "0.66rem",
-                        "border": f"1px solid {COLORS['border']}",
-                        "min-width": "32px",
-                    },
-                ),
-                style={"width": W["open_tasks"], "padding-right": "10px"},
-            ),
-            html.Div(
-                [make_task_mini_bar(label, value, progress) for label, value, progress in get_progress_items(row)],
-                style={"width": W["progress"], "padding-right": "10px"},
-            ),
-            html.Div(
-                dbc.Button(
-                    "View",
-                    href=f"/project/{row['id']}",
-                    size="sm",
-                    color="dark",
-                    outline=True,
-                    className="w-100",
-                    style={"font-size": "0.65rem"},
-                ),
-                style={"width": W["action"]},
-            ),
-        ],
-        style={
-            "display": "flex",
-            "align-items": "center",
-            "backgroundColor": COLORS["surface"],
-            "padding": "9px 16px",
-            "borderRadius": "8px",
-            "border": f"1px solid {COLORS['border']}",
-            "margin-bottom": "8px",
-        },
-        className="shadow-sm",
-    )
-
-
-def render_not_found() -> dbc.Container:
-    return dbc.Container(
-        dbc.Alert(
-            [
-                html.H4("Project not found", className="alert-heading"),
-                html.P("The link is invalid or the project no longer exists in the sheet."),
-                dbc.Button("Back to dashboard", href="/", color="primary"),
-            ],
-            color="warning",
-            className="mt-4",
-        ),
-        fluid=True,
-    )
-
-
-def render_data_error(error_message: str) -> dbc.Container:
-    return dbc.Container(
-        dbc.Alert(
-            [
-                html.H4("Unable to load the dashboard data", className="alert-heading"),
-                html.P("The local CSV could not be loaded right now."),
-                html.Code(error_message),
-            ],
-            color="danger",
-            className="mt-4",
-        ),
-        fluid=True,
-    )
-
-
-def render_project_detail(project: pd.Series) -> dbc.Container:
-    interactions = fetch_project_interactions(int(project["id"]))
-    tasks = fetch_project_tasks(int(project["id"]))
-    return dbc.Container(
-        [
-            dcc.Store(id="interaction-store", data=interactions),
-            dcc.Store(id="task-store", data=tasks),
-            dcc.Store(id="selected-task-store", data=None),
-            dbc.Button(
-                "← Cohort Overview",
-                href="/",
-                color="link",
-                className="p-0 mb-4",
-                style={"color": COLORS["primary"]},
-            ),
-            html.H1(
-                project["name"],
-                style={
-                    "font-weight": "900",
-                    "color": COLORS["primary"],
-                    "font-size": "2rem",
-                    "margin-bottom": "0.35rem",
-                },
-            ),
-            html.P(
-                project["summary"],
-                className="text-muted mb-3",
-                style={"font-size": "1rem", "line-height": "1.4"},
-            ),
-            dbc.Tabs(
-                [
-                    dbc.Tab(
-                        label="Tasks",
-                        tab_id="tasks-tab",
-                        children=[
-                            html.Div(
-                                [
-                                    html.H5(
-                                        "Open Tasks",
-                                        style={
-                                            "font-weight": "700",
-                                            "color": COLORS["primary"],
-                                            "font-size": "1rem",
-                                        },
-                                    ),
-                                    dbc.Card(
-                                        [
-                                            dbc.CardBody(
-                                                [
-                                                    dbc.Input(
-                                                        id="manual-task-input",
-                                                        placeholder="Add a manual task...",
-                                                        type="text",
-                                                        className="mb-2",
-                                                    ),
-                                                    dbc.Textarea(
-                                                        id="manual-task-comments",
-                                                        placeholder="Optional comments...",
-                                                        style={
-                                                            "minHeight": "72px",
-                                                            "fontSize": "0.84rem",
-                                                        },
-                                                        className="mb-2",
-                                                    ),
-                                                    dbc.Button(
-                                                        "Add Task",
-                                                        id="add-manual-task-btn",
-                                                        color="primary",
-                                                        size="sm",
-                                                    ),
-                                                    html.Div(
-                                                        id="manual-task-save-status",
-                                                        className="small text-muted mt-2",
-                                                    ),
-                                                ]
-                                            )
-                                        ],
-                                        className="border-0 shadow-sm mb-3",
-                                    ),
-                                    render_tasks_table(tasks),
-                                ],
-                                className="pt-4",
-                            )
-                        ],
-                    ),
-                    dbc.Tab(
-                        label="Interactions",
-                        tab_id="interactions-tab",
-                        children=[
-                            html.Div(
-                                [
-                                    html.H5(
-                                        "Interactions",
-                                        style={
-                                            "font-weight": "700",
-                                            "color": COLORS["primary"],
-                                            "font-size": "1rem",
-                                        },
-                                    ),
-                                    render_interactions_table(interactions),
-                                    dbc.Card(
-                                        [
-                                            dbc.CardHeader(
-                                                "Interaction History",
-                                                style={
-                                                    "background": "#eef3ff",
-                                                    "color": COLORS["primary"],
-                                                    "fontWeight": "700",
-                                                },
-                                            ),
-                                            dbc.CardBody(
-                                                [
-                                                    dbc.Textarea(
-                                                        id="interaction-input",
-                                                        placeholder="Paste an email or meeting note here...",
-                                                        style={
-                                                            "minHeight": "110px",
-                                                            "marginBottom": "10px",
-                                                            "fontSize": "0.86rem",
-                                                        },
-                                                    ),
-                                                    dbc.Button(
-                                                        "Add Interaction",
-                                                        id="add-interaction-btn",
-                                                        color="primary",
-                                                        size="sm",
-                                                        className="mb-2",
-                                                    ),
-                                                    html.Div(
-                                                        id="interaction-save-status",
-                                                        className="small text-muted mb-3",
-                                                    ),
-                                                    html.Div(
-                                                        render_interaction_history_items(interactions),
-                                                        id="interaction-history-list",
-                                                    )
-                                                ],
-                                            ),
-                                        ],
-                                        className="border-0 shadow-sm mt-4",
-                                    ),
-                                ],
-                                className="pt-4",
-                            )
-                        ],
-                    ),
-                    dbc.Tab(
-                        label="Project Details",
-                        tab_id="details-tab",
-                        children=[
-                            html.Div(
-                                [
-                                    dbc.Row(
-                                        [
-                                            dbc.Col(
-                                                [
-                                                    html.Div(
-                                                        [
-                                                            html.H5(
-                                                                "The Problem Submission",
-                                                                style={
-                                                                    "font-weight": "bold",
-                                                                    "font-size": "1rem",
-                                                                },
-                                                            ),
-                                                            html.P(
-                                                                project["full_problem"],
-                                                                style={
-                                                                    "white-space": "pre-wrap",
-                                                                    "line-height": "1.6",
-                                                                    "font-size": "0.92rem",
-                                                                },
-                                                            ),
-                                                            html.Hr(className="my-5"),
-                                                            html.H5(
-                                                                "8-Week Success Metric",
-                                                                style={
-                                                                    "font-weight": "bold",
-                                                                    "font-size": "1rem",
-                                                                },
-                                                            ),
-                                                            html.P(
-                                                                project["full_success"],
-                                                                style={
-                                                                    "white-space": "pre-wrap",
-                                                                    "line-height": "1.6",
-                                                                    "font-size": "0.92rem",
-                                                                },
-                                                            ),
-                                                        ],
-                                                        className="bg-white p-4 border shadow-sm rounded-3",
-                                                    ),
-                                                ],
-                                                width=8,
-                                            ),
-                                            dbc.Col(
-                                                [
-                                                    dbc.Card(
-                                                        [
-                                                            dbc.CardHeader(
-                                                                "Lab Contact Card",
-                                                                style={
-                                                                    "background": COLORS["primary"],
-                                                                    "color": "white",
-                                                                },
-                                                            ),
-                                                            dbc.CardBody(
-                                                                [
-                                                                    html.Small(
-                                                                        "Team Lead",
-                                                                        className="text-muted d-block",
-                                                                    ),
-                                                                    html.P(
-                                                                        project["lead"],
-                                                                        style={
-                                                                            "font-weight": "700",
-                                                                            "font-size": "0.92rem",
-                                                                        },
-                                                                    ),
-                                                                    html.Small(
-                                                                        "Lead Email",
-                                                                        className="text-muted d-block",
-                                                                    ),
-                                                                    html.P(
-                                                                        project["lead_email"],
-                                                                        style={"font-size": "0.88rem"},
-                                                                    ),
-                                                                    html.Small(
-                                                                        "Mentor Team",
-                                                                        className="text-muted d-block",
-                                                                    ),
-                                                                    html.P(
-                                                                        project["mentor"],
-                                                                        style={
-                                                                            "font-weight": "700",
-                                                                            "color": COLORS["primary"],
-                                                                            "white-space": "pre-wrap",
-                                                                            "font-size": "0.88rem",
-                                                                        },
-                                                                    ),
-                                                                    html.Small(
-                                                                        "Support Requested",
-                                                                        className="text-muted d-block",
-                                                                    ),
-                                                                    html.P(
-                                                                        project["support"],
-                                                                        style={
-                                                                            "font-weight": "600",
-                                                                            "font-size": "0.88rem",
-                                                                        },
-                                                                    ),
-                                                                    html.Hr(),
-                                                                    html.Small(
-                                                                        "Team Composition",
-                                                                        className="text-muted d-block",
-                                                                    ),
-                                                                    html.P(
-                                                                        project["team_composition"],
-                                                                        style={
-                                                                            "font-weight": "600",
-                                                                            "font-size": "0.88rem",
-                                                                        },
-                                                                    ),
-                                                                    html.Small(
-                                                                        "Participant Emails",
-                                                                        className="text-muted d-block",
-                                                                    ),
-                                                                    html.Ul(
-                                                                        [
-                                                                            html.Li(
-                                                                                email,
-                                                                                style={"font-size": "0.8rem"},
-                                                                            )
-                                                                            for email in project["all_emails"]
-                                                                        ],
-                                                                        className="mb-0 ps-3",
-                                                                    ),
-                                                                ]
-                                                            ),
-                                                        ],
-                                                        className="border-0 shadow-sm",
-                                                    )
-                                                ],
-                                                width=4,
-                                            ),
-                                        ],
-                                        className="g-4",
-                                    ),
-                                ],
-                                className="pt-4",
-                            )
-                        ],
-                    ),
-                ],
-                active_tab="tasks-tab",
-            ),
-        ],
-        fluid=True,
-    )
-
-
-def render_dashboard(df: pd.DataFrame) -> html.Div:
-    open_task_counts = fetch_open_task_counts()
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Small(
-                        "PROJECT & SUMMARY",
-                        style={"width": W["project"], "font-weight": "bold", "color": "#7a7a7a"},
-                    ),
-                    html.Small(
-                        "LEAD / TEAM",
-                        style={"width": W["lead_team"], "font-weight": "bold", "color": "#7a7a7a"},
-                    ),
-                    html.Small(
-                        "MENTORS",
-                        style={"width": W["mentors"], "font-weight": "bold", "color": "#7a7a7a"},
-                    ),
-                    html.Small(
-                        "OPEN TASKS",
-                        style={"width": W["open_tasks"], "font-weight": "bold", "color": "#7a7a7a"},
-                    ),
-                    html.Small(
-                        "NOTION PROGRESS",
-                        style={"width": W["progress"], "font-weight": "bold", "color": "#7a7a7a"},
-                    ),
-                    html.Small(
-                        "ACTION",
-                        style={"width": W["action"], "font-weight": "bold", "color": "#7a7a7a"},
-                    ),
-                ],
-                style={"display": "flex", "padding": "0 16px", "margin-bottom": "8px"},
-            ),
-            html.Div([make_project_row(row, open_task_counts) for _, row in df.iterrows()]),
-        ]
-    )
-
-
-app.layout = html.Div(
-    style={"backgroundColor": COLORS["background"], "minHeight": "100vh"},
-    children=[
-        dcc.Location(id="url", refresh=False),
-        html.Div(
-            [
-                dbc.Container(
-                    [
-                        html.Div(
-                            [
-                                html.Div(
-                                    [
-                                        html.H4(
-                                            "2026 AI Lab Dashboard",
-                                            style={
-                                                "color": "white",
-                                                "font-weight": "900",
-                                                "margin": 0,
-                                                "font-size": "1.25rem",
-                                            },
-                                        ),
-                                    ]
-                                ),
-                                html.Small(
-                                    f"{len(PROJECTS_DF)} projects loaded"
-                                    if DATA_ERROR is None
-                                    else "Data unavailable",
-                                    style={"color": "rgba(255,255,255,0.85)", "font-size": "0.78rem"},
-                                ),
-                            ],
-                            className="d-flex justify-content-between align-items-center",
-                        )
-                    ],
-                    fluid=True,
+        if extracted_tasks:
+            conn.executemany(
+                """
+                INSERT INTO tasks (
+                    task_id, project_id, source_timestamp, description,
+                    status, comments, updated_at, completed_at
                 )
-            ],
-            style={
-                "backgroundColor": COLORS["primary"],
-                "padding": "0.55rem 0",
-                "marginBottom": "1rem",
-            },
-        ),
-        dbc.Container(id="page-content", fluid=True, style={"padding": "0 2rem"}),
-    ],
-)
+                VALUES (?, ?, ?, ?, 'open', '', ?, NULL)
+                """,
+                [(str(uuid.uuid4()), project_id, interaction_timestamp, task, interaction_timestamp) for task in extracted_tasks],
+            )
 
 
-@app.callback(Output("page-content", "children"), Input("url", "pathname"))
-def render_page(pathname: str | None) -> html.Div | dbc.Container:
-    if DATA_ERROR is not None:
-        return render_data_error(DATA_ERROR)
-
-    current_path = pathname or "/"
-    if current_path.startswith("/project/"):
-        slug = current_path.split("/")[-1]
-        if not slug.isdigit():
-            return render_not_found()
-
-        project_id = int(slug)
-        matches = PROJECTS_DF[PROJECTS_DF["id"] == project_id]
-        if matches.empty:
-            return render_not_found()
-        return render_project_detail(matches.iloc[0])
-
-    return render_dashboard(PROJECTS_DF)
-
-
-@app.callback(
-    Output("interaction-history-list", "children"),
-    Output("interaction-save-status", "children"),
-    Output("interaction-input", "value"),
-    Output("interaction-store", "data"),
-    Output("interaction-raw-view", "children"),
-    Input("add-interaction-btn", "n_clicks", allow_optional=True),
-    State("url", "pathname"),
-    State("interaction-input", "value", allow_optional=True),
-    prevent_initial_call=True,
-)
-def handle_interactions(
-    n_clicks: int | None,
-    pathname: str | None,
-    content: str | None,
-) -> tuple[html.Div | html.P, str, str, list[dict[str, str]], html.Div | html.P]:
-    current_path = pathname or "/"
-    if not current_path.startswith("/project/"):
-        return html.Div(), "", content or "", [], html.Div()
-
-    slug = current_path.split("/")[-1]
-    if not slug.isdigit():
-        not_found = html.P("Project not found.", className="text-muted mb-0")
-        return not_found, "", content or "", [], not_found
-
-    project_id = int(slug)
-    trimmed_content = clean_text(content)
-
-    if n_clicks and trimmed_content:
-        add_interaction(project_id, trimmed_content)
-        interactions = fetch_project_interactions(project_id)
-        latest = interactions[0]
-        return (
-            render_interaction_history_items(interactions),
-            "Interaction saved.",
-            "",
-            interactions,
-            render_raw_interaction_view(latest),
+def add_manual_task(project_id: int, description: str, comments: str = "") -> None:
+    now = datetime.now()
+    with connect_db() as conn:
+        conn.execute(
+            """
+            INSERT INTO tasks (
+                task_id, project_id, source_timestamp, description,
+                status, comments, updated_at, completed_at
+            )
+            VALUES (?, ?, ?, ?, 'open', ?, ?, NULL)
+            """,
+            [str(uuid.uuid4()), project_id, now, description, comments, now],
         )
 
-    interactions = fetch_project_interactions(project_id)
-    placeholder = (
-        html.P("Paste content into the box before saving.", className="text-muted mb-0")
-        if n_clicks
-        else render_raw_interaction_view(None)
-    )
-    return (
-        render_interaction_history_items(interactions),
-        "Paste content into the box before saving." if n_clicks else "",
-        content or "",
-        interactions,
-        placeholder,
-    )
 
-
-@app.callback(
-    Output("task-editor-view", "children"),
-    Output("selected-task-store", "data"),
-    Input({"type": "task-row", "index": dash.ALL}, "n_clicks", allow_optional=True),
-    Input("close-task-editor", "n_clicks", allow_optional=True),
-    State("task-store", "data", allow_optional=True),
-    prevent_initial_call=True,
-)
-def handle_task_selection(
-    n_clicks: list[int] | None,
-    close_clicks: int | None,
-    tasks: list[dict[str, str]] | None,
-) -> tuple[html.Div, dict[str, str] | None]:
-    if not tasks:
-        return render_task_editor(None), None
-
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        return render_task_editor(None), None
-
-    triggered_id = ctx.triggered_id
-    if triggered_id == "close-task-editor":
-        if not close_clicks:
-            return dash.no_update, dash.no_update
-        return render_task_editor(None), None
-
-    if not isinstance(triggered_id, dict):
-        return render_task_editor(None), None
-
-    selected_index = int(triggered_id["index"])
-    if selected_index >= len(tasks):
-        return render_task_editor(None), None
-    if not n_clicks or selected_index >= len(n_clicks) or not n_clicks[selected_index]:
-        return dash.no_update, dash.no_update
-
-    selected_task = tasks[selected_index]
-    return render_task_editor(selected_task), selected_task
-
-
-@app.callback(
-    Output("page-content", "children", allow_duplicate=True),
-    Input("save-task-btn", "n_clicks", allow_optional=True),
-    Input("delete-task-btn", "n_clicks", allow_optional=True),
-    State("selected-task-store", "data", allow_optional=True),
-    State("task-editor-status", "value", allow_optional=True),
-    State("task-editor-comments", "value", allow_optional=True),
-    State("url", "pathname"),
-    prevent_initial_call=True,
-)
-def handle_task_updates(
-    save_clicks: int | None,
-    delete_clicks: int | None,
-    selected_task: dict[str, str] | None,
-    status: str | None,
-    comments: str | None,
-    pathname: str | None,
-) -> html.Div | dbc.Container:
-    if not selected_task:
-        return dash.no_update
-
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        return dash.no_update
-
-    triggered_id = ctx.triggered_id
-    if triggered_id == "delete-task-btn":
-        if not delete_clicks:
-            return dash.no_update
-        delete_task(selected_task["task_id"])
-    elif triggered_id == "save-task-btn":
-        if not save_clicks:
-            return dash.no_update
-        update_task(
-            selected_task["task_id"],
-            status or "open",
-            comments or "",
+def update_task(task_id: str, status: str, comments: str) -> None:
+    now = datetime.now()
+    completed_at = now if status == "done" else None
+    with connect_db() as conn:
+        conn.execute(
+            """
+            UPDATE tasks
+            SET status = ?, comments = ?, updated_at = ?, completed_at = ?
+            WHERE task_id = ?
+            """,
+            [status, comments, now, completed_at, task_id],
         )
+
+
+def delete_task(task_id: str) -> None:
+    with connect_db() as conn:
+        conn.execute("DELETE FROM tasks WHERE task_id = ?", [task_id])
+
+
+def nl_to_br(text: str) -> str:
+    return "<br>".join(escape(text).splitlines())
+
+
+def base_html(title: str, body: str) -> str:
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape(title)}</title>
+  <style>
+    body {{ margin:0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:{COLORS['background']}; color:#1f2937; }}
+    .header {{ background:{COLORS['primary']}; color:white; padding:14px 24px; }}
+    .header h1 {{ margin:0; font-size:1.4rem; }}
+    .container {{ max-width:1280px; margin:0 auto; padding:20px 24px 40px; }}
+    .card {{ background:white; border:1px solid {COLORS['border']}; border-radius:12px; box-shadow:0 6px 18px rgba(15,23,42,.06); }}
+    .table {{ width:100%; border-collapse:collapse; }}
+    .table th, .table td {{ padding:12px 10px; border-bottom:1px solid #e5e7eb; vertical-align:top; }}
+    .table th {{ text-align:left; font-size:.78rem; color:#6b7280; letter-spacing:.02em; }}
+    .badge {{ display:inline-block; padding:3px 8px; border:1px solid {COLORS['border']}; border-radius:999px; font-size:.74rem; background:#f8fafc; }}
+    .btn, button {{ display:inline-block; border:none; border-radius:8px; padding:8px 12px; font-size:.9rem; cursor:pointer; background:{COLORS['primary']}; color:white; text-decoration:none; }}
+    .btn-secondary {{ background:white; color:{COLORS['primary']}; border:1px solid {COLORS['border']}; }}
+    .btn-link {{ background:none; color:{COLORS['primary']}; padding:0; }}
+    .danger {{ color:#b91c1c; }}
+    .muted {{ color:{COLORS['muted']}; }}
+    .tabs {{ display:flex; gap:10px; margin:18px 0 20px; }}
+    .tab {{ padding:10px 14px; border-radius:999px; border:1px solid {COLORS['border']}; background:white; color:{COLORS['primary']}; text-decoration:none; font-weight:600; }}
+    .tab.active {{ background:{COLORS['primary']}; color:white; border-color:{COLORS['primary']}; }}
+    .grid-2 {{ display:grid; grid-template-columns:2fr 1fr; gap:20px; }}
+    .stack > * + * {{ margin-top:16px; }}
+    textarea, input, select {{ width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:8px; padding:10px 12px; font:inherit; }}
+    textarea {{ min-height:110px; }}
+    .small {{ font-size:.84rem; }}
+    .pre {{ white-space:pre-wrap; font-size:.88rem; line-height:1.5; }}
+    .pillcount {{ min-width:28px; text-align:center; }}
+    .row-actions form {{ display:inline; }}
+    @media (max-width: 900px) {{
+      .grid-2 {{ grid-template-columns:1fr; }}
+      .table-responsive {{ overflow:auto; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="header"><h1>2026 AI Lab Dashboard</h1></div>
+  <div class="container">{body}</div>
+</body>
+</html>"""
+
+
+def project_tabs(project_id: int, active_tab: str) -> str:
+    def tab(label: str, tab_id: str) -> str:
+        cls = "tab active" if active_tab == tab_id else "tab"
+        return f'<a class="{cls}" href="/project/{project_id}?tab={tab_id}">{escape(label)}</a>'
+    return f'<div class="tabs">{tab("Tasks", "tasks")}{tab("Interactions", "interactions")}{tab("Project Details", "details")}</div>'
+
+
+def render_home() -> str:
+    projects = fetch_projects()
+    rows = []
+    for project in projects:
+        mentor = nl_to_br(str(project["mentor"]))
+        rows.append(
+            f"""
+            <tr>
+              <td><strong style="color:{COLORS['primary']}">{escape(str(project['name']))}</strong><br><span class="small muted">{escape(str(project['summary']))}</span></td>
+              <td><div class="small"><strong>{escape(str(project['lead']))}</strong><br><span class="badge">{escape(str(project['team_composition']))}</span></div></td>
+              <td class="small" style="white-space:pre-wrap;color:{COLORS['primary']}">{mentor}</td>
+              <td><span class="badge pillcount">{project['open_task_count']}</span></td>
+              <td class="small muted">KPI Pending</td>
+              <td><a class="btn btn-secondary" href="/project/{project['id']}">View</a></td>
+            </tr>
+            """
+        )
+    body = f"""
+      <div class="card table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Project & Summary</th>
+              <th>Lead / Team</th>
+              <th>Mentors</th>
+              <th>Open Tasks</th>
+              <th>Notion Progress</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>{''.join(rows)}</tbody>
+        </table>
+      </div>
+    """
+    return base_html("AI Lab Dashboard", body)
+
+
+def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, message: str = "") -> str:
+    open_tasks = fetch_project_tasks(int(project["id"]), "open")
+    selected_task = next((task for task in open_tasks if task["task_id"] == selected_task_id), None)
+    task_rows = "".join(
+        f"""
+        <tr>
+          <td>{escape(task['description'])}</td>
+          <td class="small muted">{escape(task['timestamp'])}</td>
+          <td class="small muted">{escape(task['status'].replace('_', ' ').title())}</td>
+          <td class="small muted">{escape(task['completed_timestamp'] or '-')}</td>
+          <td><a class="btn-link" href="/project/{project['id']}?tab=tasks&task={task['task_id']}">Manage</a></td>
+        </tr>
+        """
+        for task in open_tasks
+    ) or '<tr><td colspan="5" class="muted">No open tasks detected from interactions yet.</td></tr>'
+    editor = """
+      <div class="muted">Click a task to manage its status and comments.</div>
+    """
+    if selected_task:
+        editor = f"""
+          <form method="post" action="/project/{project['id']}/tasks/update" class="stack">
+            <input type="hidden" name="task_id" value="{escape(selected_task['task_id'])}">
+            <input type="hidden" name="tab" value="tasks">
+            <div><strong style="color:{COLORS['primary']}">{escape(selected_task['description'])}</strong></div>
+            <div class="small"><strong>Date Opened:</strong> {escape(selected_task['timestamp'])}</div>
+            <div class="small"><strong>Date Completed:</strong> {escape(selected_task['completed_timestamp'] or '-')}</div>
+            <label class="small muted">Status</label>
+            <select name="status">
+              {''.join(f'<option value="{value}"{" selected" if selected_task["status"] == value else ""}>{label}</option>' for value, label in [("open","Open"),("in_progress","In Progress"),("blocked","Blocked"),("done","Done")])}
+            </select>
+            <label class="small muted">Comments</label>
+            <textarea name="comments">{escape(selected_task['comments'])}</textarea>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button type="submit">Save</button>
+              <a class="btn btn-secondary" href="/project/{project['id']}?tab=tasks">Close</a>
+            </div>
+          </form>
+          <form method="post" action="/project/{project['id']}/tasks/delete" style="margin-top:12px;">
+            <input type="hidden" name="task_id" value="{escape(selected_task['task_id'])}">
+            <input type="hidden" name="tab" value="tasks">
+            <button type="submit" class="btn btn-secondary danger">Delete</button>
+          </form>
+        """
+    return f"""
+      <div class="stack">
+        <div class="card" style="padding:16px;">
+          <form method="post" action="/project/{project['id']}/tasks/manual" class="stack">
+            <input type="hidden" name="tab" value="tasks">
+            <input name="description" placeholder="Add a manual task...">
+            <textarea name="comments" placeholder="Optional comments..." style="min-height:72px;"></textarea>
+            <div><button type="submit">Add Task</button></div>
+          </form>
+        </div>
+        {f'<div class="small muted">{escape(message)}</div>' if message else ''}
+        <div class="card table-responsive">
+          <table class="table">
+            <thead><tr><th>Task</th><th>Date Opened</th><th>Status</th><th>Date Completed</th><th></th></tr></thead>
+            <tbody>{task_rows}</tbody>
+          </table>
+        </div>
+        <div class="card" style="padding:16px;">{editor}</div>
+      </div>
+    """
+
+
+def render_interactions_tab(project: dict[str, object], selected_interaction_id: str | None, message: str = "") -> str:
+    interactions = fetch_project_interactions(int(project["id"]))
+    selected = next((item for item in interactions if item["interaction_id"] == selected_interaction_id), None)
+    rows = "".join(
+        f"""
+        <tr>
+          <td class="small muted">{escape(item['timestamp'])}</td>
+          <td><a class="btn-link" href="/project/{project['id']}?tab=interactions&interaction={item['interaction_id']}">{escape(item['summary'])}</a></td>
+        </tr>
+        """
+        for item in interactions
+    ) or '<tr><td colspan="2" class="muted">No interactions recorded yet.</td></tr>'
+    raw_view = '<div class="muted">Click an interaction to view the full raw content.</div>'
+    if selected:
+        raw_view = f"""
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span class="small muted">{escape(selected['timestamp'])}</span>
+            <a class="btn-link" href="/project/{project['id']}?tab=interactions">Close</a>
+          </div>
+          <div class="pre">{nl_to_br(selected['content'])}</div>
+        """
+    history = "".join(
+        f'<div class="small" style="margin-bottom:12px;"><div class="muted">{escape(item["timestamp"])}</div><div>{escape(item["summary"])}</div></div>'
+        for item in interactions
+    ) or '<div class="muted">No interactions recorded yet.</div>'
+    return f"""
+      <div class="stack">
+        {f'<div class="small muted">{escape(message)}</div>' if message else ''}
+        <div class="card table-responsive">
+          <table class="table">
+            <thead><tr><th>Date</th><th>Summary</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
+        <div class="card" style="padding:16px;">{raw_view}</div>
+        <div class="card" style="padding:16px;">
+          <h3 style="margin-top:0;color:{COLORS['primary']};font-size:1rem;">Interaction History</h3>
+          <form method="post" action="/project/{project['id']}/interactions/add" class="stack">
+            <input type="hidden" name="tab" value="interactions">
+            <textarea name="content" placeholder="Paste an email or meeting note here..."></textarea>
+            <div><button type="submit">Add Interaction</button></div>
+          </form>
+          <div style="margin-top:16px;">{history}</div>
+        </div>
+      </div>
+    """
+
+
+def render_details_tab(project: dict[str, object]) -> str:
+    emails = "".join(f"<li>{escape(email)}</li>" for email in project["all_emails"])
+    mentor_html = nl_to_br(str(project["mentor"]))
+    return f"""
+      <div class="grid-2">
+        <div class="card" style="padding:20px;">
+          <h3 style="margin-top:0;color:{COLORS['primary']};font-size:1rem;">The Problem Submission</h3>
+          <div class="pre">{nl_to_br(str(project['full_problem']))}</div>
+          <hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb;">
+          <h3 style="margin-top:0;color:{COLORS['primary']};font-size:1rem;">8-Week Success Metric</h3>
+          <div class="pre">{nl_to_br(str(project['full_success']))}</div>
+        </div>
+        <div class="card" style="padding:20px;">
+          <h3 style="margin-top:0;color:{COLORS['primary']};font-size:1rem;">Lab Contact Card</h3>
+          <div class="small muted">Team Lead</div><div style="margin-bottom:10px;"><strong>{escape(str(project['lead']))}</strong></div>
+          <div class="small muted">Lead Email</div><div style="margin-bottom:10px;">{escape(str(project['lead_email']))}</div>
+          <div class="small muted">Mentor Team</div><div style="margin-bottom:10px;white-space:pre-wrap;color:{COLORS['primary']};"><strong>{mentor_html}</strong></div>
+          <div class="small muted">Support Requested</div><div style="margin-bottom:10px;">{escape(str(project['support']))}</div>
+          <div class="small muted">Team Composition</div><div style="margin-bottom:10px;">{escape(str(project['team_composition']))}</div>
+          <div class="small muted">Participant Emails</div><ul>{emails}</ul>
+        </div>
+      </div>
+    """
+
+
+def render_project_page(project_id: int, tab: str = "tasks", selected_task_id: str | None = None, selected_interaction_id: str | None = None, message: str = "") -> str:
+    project = fetch_project(project_id)
+    if not project:
+        return base_html("Not Found", '<div class="card" style="padding:20px;">Project not found.</div>')
+    if tab == "interactions":
+        tab_content = render_interactions_tab(project, selected_interaction_id, message)
+    elif tab == "details":
+        tab_content = render_details_tab(project)
     else:
-        return dash.no_update
-
-    current_path = pathname or "/"
-    if current_path.startswith("/project/"):
-        slug = current_path.split("/")[-1]
-        if slug.isdigit():
-            project_id = int(slug)
-            matches = PROJECTS_DF[PROJECTS_DF["id"] == project_id]
-            if not matches.empty:
-                return render_project_detail(matches.iloc[0])
-
-    return render_dashboard(PROJECTS_DF)
+        tab = "tasks"
+        tab_content = render_tasks_tab(project, selected_task_id, message)
+    body = f"""
+      <a class="btn btn-secondary" href="/">Back to dashboard</a>
+      <h1 style="color:{COLORS['primary']};margin:18px 0 6px;">{escape(str(project['name']))}</h1>
+      <p class="muted" style="margin-top:0;">{escape(str(project['summary']))}</p>
+      {project_tabs(project_id, tab)}
+      {tab_content}
+    """
+    return base_html(str(project["name"]), body)
 
 
-@app.callback(
-    Output("page-content", "children", allow_duplicate=True),
-    Input("add-manual-task-btn", "n_clicks", allow_optional=True),
-    State("manual-task-input", "value", allow_optional=True),
-    State("manual-task-comments", "value", allow_optional=True),
-    State("url", "pathname"),
-    prevent_initial_call=True,
-)
-def handle_manual_task_create(
-    n_clicks: int | None,
-    description: str | None,
-    comments: str | None,
-    pathname: str | None,
-) -> html.Div | dbc.Container:
-    if not n_clicks:
-        return dash.no_update
-
-    task_description = clean_text(description)
-    if not task_description:
-        return dash.no_update
-
-    current_path = pathname or "/"
-    if current_path.startswith("/project/"):
-        slug = current_path.split("/")[-1]
-        if slug.isdigit():
-            project_id = int(slug)
-            add_manual_task(project_id, task_description, clean_text(comments))
-            matches = PROJECTS_DF[PROJECTS_DF["id"] == project_id]
-            if not matches.empty:
-                return render_project_detail(matches.iloc[0])
-
-    return render_dashboard(PROJECTS_DF)
+app = Flask(__name__)
+server = app
 
 
-@app.callback(
-    Output("interaction-raw-view", "children", allow_duplicate=True),
-    Input("close-interaction-view", "n_clicks", allow_optional=True),
-    Input({"type": "interaction-row", "index": dash.ALL}, "n_clicks", allow_optional=True),
-    State("interaction-store", "data", allow_optional=True),
-    prevent_initial_call=True,
-)
-def show_raw_interaction(
-    close_clicks: int | None,
-    n_clicks: list[int] | None,
-    interactions: list[dict[str, str]] | None,
-) -> html.Div | html.P:
-    if not interactions:
-        return html.P("No interactions recorded yet.", className="text-muted mb-0")
+@app.get("/")
+def home() -> str:
+    return render_home()
 
-    ctx = dash.callback_context
-    if not ctx.triggered:
-        return render_raw_interaction_view(None)
 
-    triggered_id = ctx.triggered_id
-    if triggered_id == "close-interaction-view":
-        return render_raw_interaction_view(None)
-    if not isinstance(triggered_id, dict):
-        return render_raw_interaction_view(None)
+@app.get("/project/<int:project_id>")
+def project_detail(project_id: int) -> str:
+    return render_project_page(
+        project_id,
+        request.args.get("tab", "tasks"),
+        request.args.get("task"),
+        request.args.get("interaction"),
+        request.args.get("message", ""),
+    )
 
-    selected_index = int(triggered_id["index"])
-    if selected_index >= len(interactions):
-        return html.P("Interaction not found.", className="text-muted mb-0")
 
-    selected = interactions[selected_index]
-    return render_raw_interaction_view(selected)
+@app.post("/project/<int:project_id>/interactions/add")
+def interaction_add(project_id: int):
+    content = clean_text(request.form.get("content", ""))
+    if content:
+        add_interaction(project_id, content)
+        message = "Interaction saved."
+    else:
+        message = "Paste content into the box before saving."
+    return redirect(f"/project/{project_id}?{urlencode({'tab': 'interactions', 'message': message})}")
+
+
+@app.post("/project/<int:project_id>/tasks/manual")
+def task_manual(project_id: int):
+    description = clean_text(request.form.get("description", ""))
+    comments = clean_text(request.form.get("comments", ""))
+    if description:
+        add_manual_task(project_id, description, comments)
+        message = "Task added."
+    else:
+        message = "Enter a task description first."
+    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks', 'message': message})}")
+
+
+@app.post("/project/<int:project_id>/tasks/update")
+def task_update(project_id: int):
+    task_id = clean_text(request.form.get("task_id", ""))
+    if task_id:
+        update_task(task_id, clean_text(request.form.get("status", "open")) or "open", clean_text(request.form.get("comments", "")))
+    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks'})}")
+
+
+@app.post("/project/<int:project_id>/tasks/delete")
+def task_delete(project_id: int):
+    task_id = clean_text(request.form.get("task_id", ""))
+    if task_id:
+        delete_task(task_id)
+    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks'})}")
 
 
 if __name__ == "__main__":
