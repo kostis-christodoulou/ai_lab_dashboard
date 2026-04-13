@@ -1792,9 +1792,9 @@ def render_page(pathname: str | None) -> html.Div | dbc.Container:
     Output("interaction-input", "value"),
     Output("interaction-store", "data"),
     Output("interaction-raw-view", "children"),
-    Input("add-interaction-btn", "n_clicks"),
+    Input("add-interaction-btn", "n_clicks", allow_optional=True),
     Input("url", "pathname"),
-    State("interaction-input", "value"),
+    State("interaction-input", "value", allow_optional=True),
     prevent_initial_call=True,
 )
 def handle_interactions(
@@ -1844,9 +1844,9 @@ def handle_interactions(
 @app.callback(
     Output("task-editor-view", "children"),
     Output("selected-task-store", "data"),
-    Input({"type": "task-row", "index": dash.ALL}, "n_clicks"),
-    Input("close-task-editor", "n_clicks"),
-    State("task-store", "data"),
+    Input({"type": "task-row", "index": dash.ALL}, "n_clicks", allow_optional=True),
+    Input("close-task-editor", "n_clicks", allow_optional=True),
+    State("task-store", "data", allow_optional=True),
     prevent_initial_call=True,
 )
 def handle_task_selection(
@@ -1882,11 +1882,11 @@ def handle_task_selection(
 
 @app.callback(
     Output("page-content", "children", allow_duplicate=True),
-    Input("save-task-btn", "n_clicks"),
-    Input("delete-task-btn", "n_clicks"),
-    State("selected-task-store", "data"),
-    State("task-editor-status", "value"),
-    State("task-editor-comments", "value"),
+    Input("save-task-btn", "n_clicks", allow_optional=True),
+    Input("delete-task-btn", "n_clicks", allow_optional=True),
+    State("selected-task-store", "data", allow_optional=True),
+    State("task-editor-status", "value", allow_optional=True),
+    State("task-editor-comments", "value", allow_optional=True),
     State("url", "pathname"),
     prevent_initial_call=True,
 )
@@ -1935,9 +1935,9 @@ def handle_task_updates(
 
 @app.callback(
     Output("page-content", "children", allow_duplicate=True),
-    Input("add-manual-task-btn", "n_clicks"),
-    State("manual-task-input", "value"),
-    State("manual-task-comments", "value"),
+    Input("add-manual-task-btn", "n_clicks", allow_optional=True),
+    State("manual-task-input", "value", allow_optional=True),
+    State("manual-task-comments", "value", allow_optional=True),
     State("url", "pathname"),
     prevent_initial_call=True,
 )
@@ -1969,9 +1969,9 @@ def handle_manual_task_create(
 
 @app.callback(
     Output("interaction-raw-view", "children", allow_duplicate=True),
-    Input("close-interaction-view", "n_clicks"),
-    Input({"type": "interaction-row", "index": dash.ALL}, "n_clicks"),
-    State("interaction-store", "data"),
+    Input("close-interaction-view", "n_clicks", allow_optional=True),
+    Input({"type": "interaction-row", "index": dash.ALL}, "n_clicks", allow_optional=True),
+    State("interaction-store", "data", allow_optional=True),
     prevent_initial_call=True,
 )
 def show_raw_interaction(
