@@ -1,0 +1,17 @@
+[project]
+name = "ai-lab-dashboard"
+version = "0.1.0"
+description = "LBS AI Lab Interactive Dashboard"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dash>=2.18.1",
+    "dash-bootstrap-components>=1.6.0",
+    "pandas>=2.2.0",
+    "gunicorn>=23.0.0",
+    "requests>=2.33.1",
+    "duckdb==1.5.1",
+]
+
+[dependency-groups]
+dev = []

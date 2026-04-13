@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+ai_lab.duckdb
+ai_lab.*duckdb
