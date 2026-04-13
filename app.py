@@ -17,7 +17,6 @@ import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent
 LOCAL_CSV_PATH = BASE_DIR / "projects.csv"
-DB_PATH = BASE_DIR / "ai_lab.duckdb"
 DEFAULT_MOTHERDUCK_DB = "ai_lab_dashboard"
 
 # Notion scaffold
@@ -150,27 +149,27 @@ def quote_identifier(value: str) -> str:
 
 def get_database_target() -> str:
     token = clean_text(os.getenv("MOTHERDUCK_TOKEN", ""))
+    if not token:
+        raise RuntimeError("MOTHERDUCK_TOKEN is required. This app is configured for MotherDuck only.")
     database_name = clean_text(
         os.getenv("MOTHERDUCK_DB", DEFAULT_MOTHERDUCK_DB)
     ) or DEFAULT_MOTHERDUCK_DB
-    if token:
-        return f"md:{database_name}?motherduck_token={token}"
-    return str(DB_PATH)
+    return f"md:{database_name}?motherduck_token={token}"
 
 
 def connect_db(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     token = clean_text(os.getenv("MOTHERDUCK_TOKEN", ""))
-    if token:
-        database_name = clean_text(
-            os.getenv("MOTHERDUCK_DB", DEFAULT_MOTHERDUCK_DB)
-        ) or DEFAULT_MOTHERDUCK_DB
-        conn = duckdb.connect(f"md:?motherduck_token={token}")
-        if not read_only:
-            conn.execute(f"CREATE DATABASE IF NOT EXISTS {quote_identifier(database_name)}")
-        conn.execute(f"USE {quote_identifier(database_name)}")
-        return conn
+    if not token:
+        raise RuntimeError("MOTHERDUCK_TOKEN is required. Set it in your environment or Render service settings.")
 
-    return duckdb.connect(str(DB_PATH), read_only=read_only)
+    database_name = clean_text(
+        os.getenv("MOTHERDUCK_DB", DEFAULT_MOTHERDUCK_DB)
+    ) or DEFAULT_MOTHERDUCK_DB
+    conn = duckdb.connect(f"md:?motherduck_token={token}")
+    if not read_only:
+        conn.execute(f"CREATE DATABASE IF NOT EXISTS {quote_identifier(database_name)}")
+    conn.execute(f"USE {quote_identifier(database_name)}")
+    return conn
 
 
 def format_mentor_text(value: object) -> str:

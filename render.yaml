@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ai-lab-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run gunicorn app:server
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: UV_VERSION
+        value: "0.8.15"
+      - key: MOTHERDUCK_DB
+        value: ai_lab_dashboard
+      - key: MOTHERDUCK_TOKEN
+        sync: false
