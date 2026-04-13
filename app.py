@@ -1793,7 +1793,7 @@ def render_page(pathname: str | None) -> html.Div | dbc.Container:
     Output("interaction-store", "data"),
     Output("interaction-raw-view", "children"),
     Input("add-interaction-btn", "n_clicks", allow_optional=True),
-    Input("url", "pathname"),
+    State("url", "pathname"),
     State("interaction-input", "value", allow_optional=True),
     prevent_initial_call=True,
 )
