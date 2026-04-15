@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from functools import wraps
 from html import escape
 import os
 from pathlib import Path
@@ -11,12 +12,18 @@ import uuid
 from urllib.parse import urlencode
 
 import duckdb
-from flask import Flask, redirect, request
+from dotenv import load_dotenv
+from flask import Flask, abort, redirect, request, session, url_for
+import msal
 import pandas as pd
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DIR = Path(__file__).resolve().parent
 LOCAL_CSV_PATH = BASE_DIR / "projects.csv"
 DEFAULT_MOTHERDUCK_DB = "ai_lab_dashboard"
+DEFAULT_ALLOWED_EMAILS = {"kchristodoulou@london.edu"}
+
+load_dotenv(BASE_DIR / ".env")
 
 COLUMN_MAP = {
     "Id": "id",
@@ -35,7 +42,7 @@ SUMMARY_OVERRIDES = {
     16: "Stopping student clubs from wasting GBP380k on failed events via AI automation.",
     4: "Personalised AI career coaching and CRM for high-stakes MBA recruitment.",
     12: "An AI assistant that helps new students prioritize opportunities from day one.",
-    9: "A WhatsApp AI assistant that unifies coursework, events, and career updates into one daily student briefing.",
+    9: "An assistant that unifies coursework, events, and career updates into one daily student briefing.",
     10: "AI menu management for on campus food outlets.",
     15: "AI marketplace connecting researchers and students with global funding sources.",
     1: "A frictionless map app to end the confusion of finding rooms on campus.",
@@ -44,6 +51,12 @@ SUMMARY_OVERRIDES = {
 }
 
 EXCLUDED_PROJECT_IDS = {3}
+NOTION_ENABLED_PROJECT_IDS = {12}
+TASK_STATUS_LABELS = {
+    "open": "To Do",
+    "in_progress": "WIP",
+    "done": "Done",
+}
 
 COLORS = {
     "primary": "#001e62",
@@ -75,6 +88,87 @@ def connect_db(read_only: bool = False) -> duckdb.DuckDBPyConnection:
         conn.execute(f"CREATE DATABASE IF NOT EXISTS {quote_identifier(database_name)}")
     conn.execute(f"USE {quote_identifier(database_name)}")
     return conn
+
+
+def parse_allowed_emails() -> set[str]:
+    configured = clean_text(os.getenv("ALLOWED_LOGIN_EMAILS", ""))
+    if not configured:
+        return set(DEFAULT_ALLOWED_EMAILS)
+    emails = {
+        email.strip().lower()
+        for email in re.split(r"[,\n;]+", configured)
+        if email.strip()
+    }
+    return emails or set(DEFAULT_ALLOWED_EMAILS)
+
+
+def azure_sso_enabled() -> bool:
+    return clean_text(os.getenv("AZURE_SSO_ENABLED", "false")).lower() in {"1", "true", "yes", "on"}
+
+
+def get_current_user() -> dict[str, str] | None:
+    user = session.get("user")
+    if not isinstance(user, dict):
+        return None
+    email = clean_text(user.get("email", "")).lower()
+    if not email:
+        return None
+    user["email"] = email
+    user["name"] = clean_text(user.get("name", "")) or email
+    return user
+
+
+def current_user_email() -> str:
+    user = get_current_user()
+    return user["email"] if user else "system"
+
+
+def build_redirect_uri() -> str:
+    configured = clean_text(os.getenv("AZURE_REDIRECT_URI", ""))
+    if configured:
+        return configured
+    return url_for("auth_callback", _external=True)
+
+
+def build_msal_app() -> msal.ConfidentialClientApplication:
+    client_id = clean_text(os.getenv("AZURE_CLIENT_ID", ""))
+    client_secret = clean_text(os.getenv("AZURE_CLIENT_SECRET", ""))
+    tenant_id = clean_text(os.getenv("AZURE_TENANT_ID", ""))
+    if not client_id or not client_secret or not tenant_id:
+        raise RuntimeError(
+            "AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID are required for Azure SSO."
+        )
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    return msal.ConfidentialClientApplication(
+        client_id=client_id,
+        authority=authority,
+        client_credential=client_secret,
+    )
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if not azure_sso_enabled():
+            return view(*args, **kwargs)
+        if get_current_user() is None:
+            next_url = request.full_path if request.query_string else request.path
+            session["post_login_redirect"] = next_url.rstrip("?")
+            return redirect(url_for("login"))
+        return view(*args, **kwargs)
+
+    return wrapped_view
+
+
+def extract_user_identity(claims: dict[str, object]) -> tuple[str, str]:
+    email = clean_text(
+        claims.get("preferred_username")
+        or claims.get("email")
+        or claims.get("upn")
+        or ""
+    ).lower()
+    name = clean_text(claims.get("name") or "") or email
+    return email, name
 
 
 def format_mentor_text(value: object) -> str:
@@ -402,9 +496,76 @@ def initialize_database(projects_df: pd.DataFrame) -> None:
                 description VARCHAR NOT NULL,
                 status VARCHAR NOT NULL DEFAULT 'open',
                 comments VARCHAR,
+                created_at TIMESTAMP,
+                created_by VARCHAR,
                 updated_at TIMESTAMP,
-                completed_at TIMESTAMP
+                updated_by VARCHAR,
+                completed_at TIMESTAMP,
+                completed_by VARCHAR,
+                deleted_at TIMESTAMP,
+                deleted_by VARCHAR,
+                source_system VARCHAR,
+                source_label VARCHAR,
+                notion_page_id VARCHAR,
+                notion_data_source_id VARCHAR,
+                notion_url VARCHAR,
+                external_status VARCHAR,
+                priority VARCHAR,
+                start_date DATE,
+                deadline DATE,
+                assignee_names VARCHAR,
+                assignee_emails VARCHAR,
+                weekly_update VARCHAR,
+                external_created_at TIMESTAMP,
+                external_updated_at TIMESTAMP,
+                sync_actor VARCHAR
             )
+            """
+        )
+        task_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info('tasks')").fetchall()
+        }
+        for column_name, definition in [
+            ("created_at", "TIMESTAMP"),
+            ("created_by", "VARCHAR"),
+            ("updated_by", "VARCHAR"),
+            ("completed_by", "VARCHAR"),
+            ("deleted_at", "TIMESTAMP"),
+            ("deleted_by", "VARCHAR"),
+            ("source_system", "VARCHAR"),
+            ("source_label", "VARCHAR"),
+            ("notion_page_id", "VARCHAR"),
+            ("notion_data_source_id", "VARCHAR"),
+            ("notion_url", "VARCHAR"),
+            ("external_status", "VARCHAR"),
+            ("priority", "VARCHAR"),
+            ("start_date", "DATE"),
+            ("deadline", "DATE"),
+            ("assignee_names", "VARCHAR"),
+            ("assignee_emails", "VARCHAR"),
+            ("weekly_update", "VARCHAR"),
+            ("external_created_at", "TIMESTAMP"),
+            ("external_updated_at", "TIMESTAMP"),
+            ("sync_actor", "VARCHAR"),
+        ]:
+            if column_name not in task_columns:
+                conn.execute(f"ALTER TABLE tasks ADD COLUMN {column_name} {definition}")
+        conn.execute(
+            """
+            UPDATE tasks
+            SET created_at = COALESCE(created_at, source_timestamp),
+                created_by = COALESCE(NULLIF(created_by, ''), 'system'),
+                updated_at = COALESCE(updated_at, source_timestamp),
+                updated_by = COALESCE(NULLIF(updated_by, ''), NULLIF(created_by, ''), 'system')
+            """
+        )
+        conn.execute(
+            """
+            UPDATE tasks
+            SET completed_by = CASE
+                WHEN completed_at IS NOT NULL AND (completed_by IS NULL OR completed_by = '') THEN COALESCE(updated_by, created_by, 'system')
+                ELSE completed_by
+            END
             """
         )
         conn.execute("DELETE FROM projects")
@@ -441,10 +602,15 @@ def initialize_database(projects_df: pd.DataFrame) -> None:
 def fetch_projects() -> list[dict[str, object]]:
     projects_df = load_projects_df()
     initialize_database(projects_df)
-    counts = fetch_open_task_counts()
+    status_counts = fetch_task_status_counts()
     records = projects_df.to_dict("records")
     for record in records:
-        record["open_task_count"] = counts.get(int(record["id"]), 0)
+        project_id = int(record["id"])
+        counts = status_counts.get(project_id, {})
+        record["todo_task_count"] = counts.get("open", 0)
+        record["wip_task_count"] = counts.get("in_progress", 0)
+        record["done_task_count"] = counts.get("done", 0)
+        record["has_notion"] = project_id in NOTION_ENABLED_PROJECT_IDS
     return records
 
 
@@ -453,6 +619,64 @@ def fetch_project(project_id: int) -> dict[str, object] | None:
         if int(record["id"]) == project_id:
             return record
     return None
+
+
+def fetch_task_by_id(task_id: str) -> dict[str, str] | None:
+    if not clean_text(task_id):
+        return None
+    with connect_db(read_only=True) as conn:
+        row = conn.execute(
+            """
+            SELECT
+                task_id,
+                project_id,
+                source_timestamp,
+                description,
+                status,
+                comments,
+                created_at,
+                created_by,
+                updated_at,
+                updated_by,
+                completed_at,
+                completed_by
+            FROM tasks
+            WHERE task_id = ?
+              AND deleted_at IS NULL
+            LIMIT 1
+            """,
+            [task_id],
+        ).fetchone()
+    if not row:
+        return None
+    (
+        found_task_id,
+        project_id,
+        timestamp,
+        description,
+        status,
+        comments,
+        created_at,
+        created_by,
+        updated_at,
+        updated_by,
+        completed_at,
+        completed_by,
+    ) = row
+    return {
+        "task_id": found_task_id,
+        "project_id": str(project_id),
+        "timestamp": timestamp.strftime("%d %b %Y, %H:%M") if isinstance(timestamp, datetime) else str(timestamp),
+        "description": description,
+        "status": status,
+        "comments": comments or "",
+        "created_at": created_at.strftime("%d %b %Y, %H:%M") if isinstance(created_at, datetime) else "",
+        "created_by": created_by or "",
+        "updated_at": updated_at.strftime("%d %b %Y, %H:%M") if isinstance(updated_at, datetime) else "",
+        "updated_by": updated_by or "",
+        "completed_timestamp": completed_at.strftime("%d %b %Y, %H:%M") if isinstance(completed_at, datetime) else "",
+        "completed_by": completed_by or "",
+    }
 
 
 def fetch_project_interactions(project_id: int) -> list[dict[str, str]]:
@@ -479,9 +703,21 @@ def fetch_project_interactions(project_id: int) -> list[dict[str, str]]:
 
 def fetch_project_tasks(project_id: int, status_filter: str | None = None) -> list[dict[str, str]]:
     query = """
-        SELECT task_id, source_timestamp, description, status, comments, completed_at
+        SELECT
+            task_id,
+            source_timestamp,
+            description,
+            status,
+            comments,
+            created_at,
+            created_by,
+            updated_at,
+            updated_by,
+            completed_at,
+            completed_by
         FROM tasks
         WHERE project_id = ?
+          AND deleted_at IS NULL
     """
     params: list[object] = [project_id]
     if status_filter:
@@ -497,26 +733,36 @@ def fetch_project_tasks(project_id: int, status_filter: str | None = None) -> li
             "description": description,
             "status": status,
             "comments": comments or "",
+            "created_at": created_at.strftime("%d %b %Y, %H:%M") if isinstance(created_at, datetime) else "",
+            "created_by": created_by or "",
+            "updated_at": updated_at.strftime("%d %b %Y, %H:%M") if isinstance(updated_at, datetime) else "",
+            "updated_by": updated_by or "",
             "completed_timestamp": completed_at.strftime("%d %b %Y, %H:%M") if isinstance(completed_at, datetime) else "",
+            "completed_by": completed_by or "",
         }
-        for task_id, timestamp, description, status, comments, completed_at in rows
+        for task_id, timestamp, description, status, comments, created_at, created_by, updated_at, updated_by, completed_at, completed_by in rows
     ]
 
 
-def fetch_open_task_counts() -> dict[int, int]:
+def fetch_task_status_counts() -> dict[int, dict[str, int]]:
     with connect_db(read_only=True) as conn:
         rows = conn.execute(
             """
-            SELECT project_id, COUNT(*)
+            SELECT project_id, status, COUNT(*)
             FROM tasks
-            WHERE status = 'open'
-            GROUP BY project_id
+            WHERE deleted_at IS NULL
+              AND status IN ('open', 'in_progress', 'done')
+            GROUP BY project_id, status
             """
         ).fetchall()
-    return {int(project_id): int(count) for project_id, count in rows}
+    counts: dict[int, dict[str, int]] = {}
+    for project_id, status, count in rows:
+        project_counts = counts.setdefault(int(project_id), {"open": 0, "in_progress": 0, "done": 0})
+        project_counts[str(status)] = int(count)
+    return counts
 
 
-def add_interaction(project_id: int, content: str) -> None:
+def add_interaction(project_id: int, content: str, actor_email: str) -> None:
     interaction_timestamp = extract_interaction_timestamp(content)
     cleaned_content = clean_interaction_content(content)
     extracted_tasks = extract_tasks_from_interaction(cleaned_content)
@@ -533,46 +779,73 @@ def add_interaction(project_id: int, content: str) -> None:
                 """
                 INSERT INTO tasks (
                     task_id, project_id, source_timestamp, description,
-                    status, comments, updated_at, completed_at
+                    status, comments, created_at, created_by, updated_at, updated_by, completed_at, completed_by
                 )
-                VALUES (?, ?, ?, ?, 'open', '', ?, NULL)
+                VALUES (?, ?, ?, ?, 'open', '', ?, ?, ?, ?, NULL, NULL)
                 """,
-                [(str(uuid.uuid4()), project_id, interaction_timestamp, task, interaction_timestamp) for task in extracted_tasks],
+                [
+                    (
+                        str(uuid.uuid4()),
+                        project_id,
+                        interaction_timestamp,
+                        task,
+                        interaction_timestamp,
+                        actor_email,
+                        interaction_timestamp,
+                        actor_email,
+                    )
+                    for task in extracted_tasks
+                ],
             )
 
 
-def add_manual_task(project_id: int, description: str, comments: str = "") -> None:
+def add_manual_task(project_id: int, description: str, comments: str = "", actor_email: str = "system") -> None:
     now = datetime.now()
     with connect_db() as conn:
         conn.execute(
             """
             INSERT INTO tasks (
                 task_id, project_id, source_timestamp, description,
-                status, comments, updated_at, completed_at
+                status, comments, created_at, created_by, updated_at, updated_by, completed_at, completed_by
             )
-            VALUES (?, ?, ?, ?, 'open', ?, ?, NULL)
+            VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL, NULL)
             """,
-            [str(uuid.uuid4()), project_id, now, description, comments, now],
+            [str(uuid.uuid4()), project_id, now, description, comments, now, actor_email, now, actor_email],
         )
 
 
-def update_task(task_id: str, status: str, comments: str) -> None:
+def update_task(task_id: str, status: str, comments: str, actor_email: str) -> None:
     now = datetime.now()
     completed_at = now if status == "done" else None
+    completed_by = actor_email if status == "done" else None
     with connect_db() as conn:
         conn.execute(
             """
             UPDATE tasks
-            SET status = ?, comments = ?, updated_at = ?, completed_at = ?
+            SET status = ?, comments = ?, updated_at = ?, updated_by = ?, completed_at = ?, completed_by = ?,
+                deleted_at = CASE WHEN ? != 'deleted' THEN NULL ELSE deleted_at END,
+                deleted_by = CASE WHEN ? != 'deleted' THEN NULL ELSE deleted_by END
             WHERE task_id = ?
             """,
-            [status, comments, now, completed_at, task_id],
+            [status, comments, now, actor_email, completed_at, completed_by, status, status, task_id],
         )
 
 
-def delete_task(task_id: str) -> None:
+def delete_task(task_id: str, actor_email: str) -> None:
     with connect_db() as conn:
-        conn.execute("DELETE FROM tasks WHERE task_id = ?", [task_id])
+        now = datetime.now()
+        conn.execute(
+            """
+            UPDATE tasks
+            SET status = 'deleted',
+                updated_at = ?,
+                updated_by = ?,
+                deleted_at = ?,
+                deleted_by = ?
+            WHERE task_id = ?
+            """,
+            [now, actor_email, now, actor_email, task_id],
+        )
 
 
 def nl_to_br(text: str) -> str:
@@ -580,6 +853,14 @@ def nl_to_br(text: str) -> str:
 
 
 def base_html(title: str, body: str) -> str:
+    user = get_current_user()
+    user_html = ""
+    if user:
+        user_html = (
+            f'<div class="user-meta"><span>{escape(user["name"])}</span>'
+            f'<span class="muted" style="color:#dbe4ff;">{escape(user["email"])}</span>'
+            f'<a class="header-link" href="{url_for("logout")}">Logout</a></div>'
+        )
     return f"""<!doctype html>
 <html>
 <head>
@@ -589,7 +870,10 @@ def base_html(title: str, body: str) -> str:
   <style>
     body {{ margin:0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:{COLORS['background']}; color:#1f2937; }}
     .header {{ background:{COLORS['primary']}; color:white; padding:14px 24px; }}
+    .header-bar {{ max-width:1280px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:16px; }}
     .header h1 {{ margin:0; font-size:1.4rem; }}
+    .user-meta {{ display:flex; align-items:center; gap:12px; font-size:.85rem; flex-wrap:wrap; justify-content:flex-end; }}
+    .header-link {{ color:white; text-decoration:none; border:1px solid rgba(255,255,255,.35); padding:6px 10px; border-radius:999px; }}
     .container {{ max-width:1280px; margin:0 auto; padding:20px 24px 40px; }}
     .card {{ background:white; border:1px solid {COLORS['border']}; border-radius:12px; box-shadow:0 6px 18px rgba(15,23,42,.06); }}
     .table {{ width:100%; border-collapse:collapse; }}
@@ -619,7 +903,7 @@ def base_html(title: str, body: str) -> str:
   </style>
 </head>
 <body>
-  <div class="header"><h1>2026 AI Lab Dashboard</h1></div>
+  <div class="header"><div class="header-bar"><h1>2026 AI Lab Dashboard</h1>{user_html}</div></div>
   <div class="container">{body}</div>
 </body>
 </html>"""
@@ -637,15 +921,20 @@ def render_home() -> str:
     rows = []
     for project in projects:
         mentor = nl_to_br(str(project["mentor"]))
+        notion_icon = "&#10003;" if project["has_notion"] else "&times;"
+        notion_color = "#15803d" if project["has_notion"] else "#b91c1c"
+        project_id = int(project["id"])
         rows.append(
             f"""
             <tr>
               <td><strong style="color:{COLORS['primary']}">{escape(str(project['name']))}</strong><br><span class="small muted">{escape(str(project['summary']))}</span></td>
               <td><div class="small"><strong>{escape(str(project['lead']))}</strong><br><span class="badge">{escape(str(project['team_composition']))}</span></div></td>
               <td class="small" style="white-space:pre-wrap;color:{COLORS['primary']}">{mentor}</td>
-              <td><span class="badge pillcount">{project['open_task_count']}</span></td>
-              <td class="small muted">KPI Pending</td>
-              <td><a class="btn btn-secondary" href="/project/{project['id']}">View</a></td>
+              <td class="small" style="text-align:center;font-weight:700;color:{notion_color};">{notion_icon}</td>
+              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=open">{project['todo_task_count']}</a></td>
+              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=in_progress">{project['wip_task_count']}</a></td>
+              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=done">{project['done_task_count']}</a></td>
+              <td><a class="btn btn-secondary" href="/project/{project_id}">View</a></td>
             </tr>
             """
         )
@@ -657,8 +946,10 @@ def render_home() -> str:
               <th>Project & Summary</th>
               <th>Lead / Team</th>
               <th>Mentors</th>
-              <th>Open Tasks</th>
-              <th>Notion Progress</th>
+              <th>Notion</th>
+              <th>To Do</th>
+              <th>WIP</th>
+              <th>Done</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -669,9 +960,17 @@ def render_home() -> str:
     return base_html("AI Lab Dashboard", body)
 
 
-def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, message: str = "") -> str:
-    open_tasks = fetch_project_tasks(int(project["id"]), "open")
-    selected_task = next((task for task in open_tasks if task["task_id"] == selected_task_id), None)
+def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, status_filter: str = "open", message: str = "") -> str:
+    current_status = status_filter if status_filter in TASK_STATUS_LABELS else "open"
+    visible_tasks = fetch_project_tasks(int(project["id"]), current_status)
+    selected_task = fetch_task_by_id(selected_task_id) if selected_task_id else None
+    if selected_task and int(selected_task["project_id"]) != int(project["id"]):
+        selected_task = None
+
+    filter_links = "".join(
+        f'<a class="{"tab active" if current_status == status else "tab"}" href="/project/{project["id"]}?tab=tasks&status={status}">{label}</a>'
+        for status, label in TASK_STATUS_LABELS.items()
+    )
     task_rows = "".join(
         f"""
         <tr>
@@ -679,11 +978,11 @@ def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, m
           <td class="small muted">{escape(task['timestamp'])}</td>
           <td class="small muted">{escape(task['status'].replace('_', ' ').title())}</td>
           <td class="small muted">{escape(task['completed_timestamp'] or '-')}</td>
-          <td><a class="btn-link" href="/project/{project['id']}?tab=tasks&task={task['task_id']}">Manage</a></td>
+          <td><a class="btn-link" href="/project/{project['id']}?tab=tasks&status={current_status}&task={task['task_id']}">Manage</a></td>
         </tr>
         """
-        for task in open_tasks
-    ) or '<tr><td colspan="5" class="muted">No open tasks detected from interactions yet.</td></tr>'
+        for task in visible_tasks
+    ) or f'<tr><td colspan="5" class="muted">No {escape(TASK_STATUS_LABELS[current_status].lower())} tasks for this project yet.</td></tr>'
     editor = """
       <div class="muted">Click a task to manage its status and comments.</div>
     """
@@ -692,9 +991,15 @@ def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, m
           <form method="post" action="/project/{project['id']}/tasks/update" class="stack">
             <input type="hidden" name="task_id" value="{escape(selected_task['task_id'])}">
             <input type="hidden" name="tab" value="tasks">
+            <input type="hidden" name="status_filter" value="{escape(current_status)}">
             <div><strong style="color:{COLORS['primary']}">{escape(selected_task['description'])}</strong></div>
             <div class="small"><strong>Date Opened:</strong> {escape(selected_task['timestamp'])}</div>
+            <div class="small"><strong>Created In App:</strong> {escape(selected_task['created_at'] or selected_task['timestamp'])}</div>
+            <div class="small"><strong>Created By:</strong> {escape(selected_task['created_by'] or '-')}</div>
+            <div class="small"><strong>Last Updated:</strong> {escape(selected_task['updated_at'] or '-')}</div>
+            <div class="small"><strong>Last Updated By:</strong> {escape(selected_task['updated_by'] or '-')}</div>
             <div class="small"><strong>Date Completed:</strong> {escape(selected_task['completed_timestamp'] or '-')}</div>
+            <div class="small"><strong>Completed By:</strong> {escape(selected_task['completed_by'] or '-')}</div>
             <label class="small muted">Status</label>
             <select name="status">
               {''.join(f'<option value="{value}"{" selected" if selected_task["status"] == value else ""}>{label}</option>' for value, label in [("open","Open"),("in_progress","In Progress"),("blocked","Blocked"),("done","Done")])}
@@ -703,12 +1008,13 @@ def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, m
             <textarea name="comments">{escape(selected_task['comments'])}</textarea>
             <div style="display:flex;gap:10px;align-items:center;">
               <button type="submit">Save</button>
-              <a class="btn btn-secondary" href="/project/{project['id']}?tab=tasks">Close</a>
+              <a class="btn btn-secondary" href="/project/{project['id']}?tab=tasks&status={current_status}">Close</a>
             </div>
           </form>
           <form method="post" action="/project/{project['id']}/tasks/delete" style="margin-top:12px;">
             <input type="hidden" name="task_id" value="{escape(selected_task['task_id'])}">
             <input type="hidden" name="tab" value="tasks">
+            <input type="hidden" name="status_filter" value="{escape(current_status)}">
             <button type="submit" class="btn btn-secondary danger">Delete</button>
           </form>
         """
@@ -717,12 +1023,14 @@ def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, m
         <div class="card" style="padding:16px;">
           <form method="post" action="/project/{project['id']}/tasks/manual" class="stack">
             <input type="hidden" name="tab" value="tasks">
+            <input type="hidden" name="status_filter" value="{escape(current_status)}">
             <input name="description" placeholder="Add a manual task...">
             <textarea name="comments" placeholder="Optional comments..." style="min-height:72px;"></textarea>
             <div><button type="submit">Add Task</button></div>
           </form>
         </div>
         {f'<div class="small muted">{escape(message)}</div>' if message else ''}
+        <div class="tabs">{filter_links}</div>
         <div class="card table-responsive">
           <table class="table">
             <thead><tr><th>Task</th><th>Date Opened</th><th>Status</th><th>Date Completed</th><th></th></tr></thead>
@@ -807,7 +1115,7 @@ def render_details_tab(project: dict[str, object]) -> str:
     """
 
 
-def render_project_page(project_id: int, tab: str = "tasks", selected_task_id: str | None = None, selected_interaction_id: str | None = None, message: str = "") -> str:
+def render_project_page(project_id: int, tab: str = "tasks", selected_task_id: str | None = None, selected_interaction_id: str | None = None, task_status: str = "open", message: str = "") -> str:
     project = fetch_project(project_id)
     if not project:
         return base_html("Not Found", '<div class="card" style="padding:20px;">Project not found.</div>')
@@ -817,7 +1125,7 @@ def render_project_page(project_id: int, tab: str = "tasks", selected_task_id: s
         tab_content = render_details_tab(project)
     else:
         tab = "tasks"
-        tab_content = render_tasks_tab(project, selected_task_id, message)
+        tab_content = render_tasks_tab(project, selected_task_id, task_status, message)
     body = f"""
       <a class="btn btn-secondary" href="/">Back to dashboard</a>
       <h1 style="color:{COLORS['primary']};margin:18px 0 6px;">{escape(str(project['name']))}</h1>
@@ -829,30 +1137,134 @@ def render_project_page(project_id: int, tab: str = "tasks", selected_task_id: s
 
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # type: ignore[assignment]
+app.config["SECRET_KEY"] = clean_text(os.getenv("FLASK_SECRET_KEY", "")) or str(uuid.uuid4())
+app.config["SESSION_COOKIE_SECURE"] = clean_text(os.getenv("FLASK_ENV", "")).lower() != "development"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 server = app
 
 
+def render_login_page(error_message: str = "") -> str:
+    body = f"""
+      <div class="card" style="max-width:640px;margin:48px auto;padding:28px;">
+        <h2 style="margin-top:0;color:{COLORS['primary']};">Sign in with Azure</h2>
+        <p class="muted">Use your London Business School Microsoft account to access the dashboard.</p>
+        <p class="small muted">Only approved email addresses can sign in.</p>
+        {f'<div class="small danger" style="margin:12px 0;">{escape(error_message)}</div>' if error_message else ''}
+        <a class="btn" href="{url_for("login")}">Continue with Microsoft</a>
+      </div>
+    """
+    return base_html("Sign In", body)
+
+
+@app.before_request
+def enforce_login():
+    if not azure_sso_enabled():
+        return None
+    allowed_paths = {"login", "auth_callback", "logout", "healthcheck"}
+    if request.endpoint in allowed_paths or request.path.startswith("/static/"):
+        return None
+    if get_current_user() is None:
+        next_url = request.full_path if request.query_string else request.path
+        session["post_login_redirect"] = next_url.rstrip("?")
+        return redirect(url_for("login"))
+    return None
+
+
+@app.get("/login")
+def login():
+    if not azure_sso_enabled():
+        return redirect(url_for("home"))
+    if get_current_user():
+        return redirect(url_for("home"))
+    try:
+        msal_app = build_msal_app()
+    except RuntimeError as exc:
+        return render_login_page(str(exc))
+    flow = msal_app.initiate_auth_code_flow(
+        scopes=["openid", "profile", "email"],
+        redirect_uri=build_redirect_uri(),
+    )
+    session["auth_flow"] = flow
+    return redirect(flow["auth_uri"])
+
+
+@app.get("/auth/callback")
+def auth_callback():
+    if not azure_sso_enabled():
+        return redirect(url_for("home"))
+    flow = session.get("auth_flow")
+    if not flow:
+        return render_login_page("Your session expired before Microsoft completed sign-in. Please try again.")
+    try:
+        result = build_msal_app().acquire_token_by_auth_code_flow(flow, request.args)
+    except RuntimeError as exc:
+        session.pop("auth_flow", None)
+        return render_login_page(str(exc))
+    except ValueError:
+        session.pop("auth_flow", None)
+        return render_login_page("Azure sign-in could not be completed. Please try again.")
+    session.pop("auth_flow", None)
+    if "error" in result:
+        return render_login_page(result.get("error_description", "Azure sign-in failed."))
+    claims = result.get("id_token_claims") or {}
+    email, name = extract_user_identity(claims)
+    allowed_emails = parse_allowed_emails()
+    if not email or email not in allowed_emails:
+        session.clear()
+        return render_login_page("Your account is not on the allowed access list for this dashboard.")
+    session["user"] = {"email": email, "name": name}
+    redirect_target = clean_text(session.pop("post_login_redirect", "")) or url_for("home")
+    return redirect(redirect_target)
+
+
+@app.get("/logout")
+def logout():
+    if not azure_sso_enabled():
+        return redirect(url_for("home"))
+    session.clear()
+    tenant_id = clean_text(os.getenv("AZURE_TENANT_ID", ""))
+    post_logout_redirect = url_for("login", _external=True)
+    if tenant_id:
+        logout_url = (
+            f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/logout?"
+            f"{urlencode({'post_logout_redirect_uri': post_logout_redirect})}"
+        )
+        return redirect(logout_url)
+    return redirect(post_logout_redirect)
+
+
+@app.get("/healthz")
+def healthcheck():
+    return "ok"
+
+
 @app.get("/")
+@login_required
 def home() -> str:
     return render_home()
 
 
 @app.get("/project/<int:project_id>")
+@login_required
 def project_detail(project_id: int) -> str:
     return render_project_page(
         project_id,
         request.args.get("tab", "tasks"),
         request.args.get("task"),
         request.args.get("interaction"),
+        request.args.get("status", "open"),
         request.args.get("message", ""),
     )
 
 
 @app.post("/project/<int:project_id>/interactions/add")
+@login_required
 def interaction_add(project_id: int):
     content = clean_text(request.form.get("content", ""))
     if content:
-        add_interaction(project_id, content)
+        add_interaction(project_id, content, current_user_email())
         message = "Interaction saved."
     else:
         message = "Paste content into the box before saving."
@@ -860,31 +1272,44 @@ def interaction_add(project_id: int):
 
 
 @app.post("/project/<int:project_id>/tasks/manual")
+@login_required
 def task_manual(project_id: int):
     description = clean_text(request.form.get("description", ""))
     comments = clean_text(request.form.get("comments", ""))
+    status_filter = clean_text(request.form.get("status_filter", "open")) or "open"
     if description:
-        add_manual_task(project_id, description, comments)
+        add_manual_task(project_id, description, comments, current_user_email())
         message = "Task added."
     else:
         message = "Enter a task description first."
-    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks', 'message': message})}")
+    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter, 'message': message})}")
 
 
 @app.post("/project/<int:project_id>/tasks/update")
+@login_required
 def task_update(project_id: int):
     task_id = clean_text(request.form.get("task_id", ""))
+    status_filter = clean_text(request.form.get("status_filter", "open")) or "open"
     if task_id:
-        update_task(task_id, clean_text(request.form.get("status", "open")) or "open", clean_text(request.form.get("comments", "")))
-    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks'})}")
+        new_status = clean_text(request.form.get("status", "open")) or "open"
+        update_task(
+            task_id,
+            new_status,
+            clean_text(request.form.get("comments", "")),
+            current_user_email(),
+        )
+        status_filter = new_status if new_status in TASK_STATUS_LABELS else status_filter
+    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter})}")
 
 
 @app.post("/project/<int:project_id>/tasks/delete")
+@login_required
 def task_delete(project_id: int):
     task_id = clean_text(request.form.get("task_id", ""))
+    status_filter = clean_text(request.form.get("status_filter", "open")) or "open"
     if task_id:
-        delete_task(task_id)
-    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks'})}")
+        delete_task(task_id, current_user_email())
+    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter})}")
 
 
 if __name__ == "__main__":

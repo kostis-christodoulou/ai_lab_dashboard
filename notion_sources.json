@@ -1,0 +1,10 @@
+[
+  {
+    "key": "compass",
+    "label": "LBS Compass",
+    "project_id": 12,
+    "url": "https://www.notion.so/3410e160932f80fb8c2cc0c917c4e21a?v=3410e160932f80bf8378000cb9e418d1&source=copy_link",
+    "token_env_var": "NOTION_COMPASS_API_KEY",
+    "enabled": true
+  }
+]

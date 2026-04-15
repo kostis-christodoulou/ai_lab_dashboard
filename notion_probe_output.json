@@ -1,0 +1,1270 @@
+{
+  "source_key": "compass",
+  "source_label": "LBS Compass",
+  "project_id": 12,
+  "probe": {
+    "mode": "database",
+    "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a",
+    "database_title": [
+      {
+        "type": "text",
+        "text": {
+          "content": "AI Lab Project Management",
+          "link": null
+        },
+        "annotations": {
+          "bold": false,
+          "italic": false,
+          "strikethrough": false,
+          "underline": false,
+          "code": false,
+          "color": "default"
+        },
+        "plain_text": "AI Lab Project Management",
+        "href": null
+      }
+    ],
+    "data_sources": [
+      {
+        "id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+        "name": "AI Lab Project Management"
+      }
+    ],
+    "first_data_source": {
+      "status": 200,
+      "body": {
+        "object": "data_source",
+        "id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+        "cover": null,
+        "icon": {
+          "type": "icon",
+          "icon": {
+            "name": "robot",
+            "color": "gray"
+          }
+        },
+        "created_time": "2026-04-13T16:20:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+        },
+        "last_edited_time": "2026-04-13T16:30:00.000Z",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "AI Lab Project Management",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "AI Lab Project Management",
+            "href": null
+          }
+        ],
+        "description": [],
+        "is_inline": false,
+        "properties": {
+          "Weekly Update": {
+            "id": "%3BX%3EA",
+            "name": "Weekly Update",
+            "description": null,
+            "type": "rich_text",
+            "rich_text": {}
+          },
+          "Start Date": {
+            "id": "Bh%7BL",
+            "name": "Start Date",
+            "description": null,
+            "type": "date",
+            "date": {}
+          },
+          "Status": {
+            "id": "%5Cb%3AG",
+            "name": "Status",
+            "description": null,
+            "type": "status",
+            "status": {
+              "options": [
+                {
+                  "id": "_qgr",
+                  "name": "Backlog",
+                  "color": "gray",
+                  "description": null
+                },
+                {
+                  "id": "YE{a",
+                  "name": "To Do",
+                  "color": "blue",
+                  "description": null
+                },
+                {
+                  "id": "Rl>M",
+                  "name": "In Progress",
+                  "color": "yellow",
+                  "description": null
+                },
+                {
+                  "id": "kLjH",
+                  "name": "Done",
+                  "color": "green",
+                  "description": null
+                }
+              ],
+              "groups": [
+                {
+                  "id": "_KX{",
+                  "name": "To-do",
+                  "color": "default",
+                  "option_ids": [
+                    "_qgr",
+                    "YE{a"
+                  ]
+                },
+                {
+                  "id": "nos[",
+                  "name": "In progress",
+                  "color": "default",
+                  "option_ids": [
+                    "Rl>M"
+                  ]
+                },
+                {
+                  "id": "fwyQ",
+                  "name": "Complete",
+                  "color": "default",
+                  "option_ids": [
+                    "kLjH"
+                  ]
+                }
+              ]
+            }
+          },
+          "Deadline": {
+            "id": "%5Ei%3Bp",
+            "name": "Deadline",
+            "description": null,
+            "type": "date",
+            "date": {}
+          },
+          "Priority": {
+            "id": "_ZKW",
+            "name": "Priority",
+            "description": null,
+            "type": "select",
+            "select": {
+              "options": [
+                {
+                  "id": "Gent",
+                  "name": "P1 - High",
+                  "color": "red",
+                  "description": null
+                },
+                {
+                  "id": "FITK",
+                  "name": "P2 - Medium",
+                  "color": "yellow",
+                  "description": null
+                },
+                {
+                  "id": "GUTx",
+                  "name": "P3 - Low",
+                  "color": "blue",
+                  "description": null
+                }
+              ]
+            }
+          },
+          "Assignee": {
+            "id": "k%3DE%5E",
+            "name": "Assignee",
+            "description": null,
+            "type": "people",
+            "people": {}
+          },
+          "Name": {
+            "id": "title",
+            "name": "Name",
+            "description": null,
+            "type": "title",
+            "title": {}
+          }
+        },
+        "parent": {
+          "type": "database_id",
+          "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+        },
+        "database_parent": {
+          "type": "block_id",
+          "block_id": "33e0e160-932f-80e1-9576-e26dc1ba3935"
+        },
+        "url": "https://app.notion.com/p/3410e160932f80fb8c2cc0c917c4e21a",
+        "public_url": null,
+        "in_trash": false,
+        "request_id": "cfcd3946-ce5f-4eb8-aa47-6b3ca367bd67"
+      }
+    },
+    "query": {
+      "status": 200,
+      "results_count": 5,
+      "has_more": false,
+      "next_cursor": null,
+      "results_preview": [
+        {
+          "id": "3410e160-932f-8098-ac8f-f16e29bbcec0",
+          "title": "Identify stakeholders and start conversation",
+          "url": "https://app.notion.com/p/Identify-stakeholders-and-start-conversation-3410e160932f8098ac8ff16e29bbcec0",
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:20:00.000Z",
+          "parent": {
+            "type": "data_source_id",
+            "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+          },
+          "property_names": [
+            "Assignee",
+            "Deadline",
+            "Name",
+            "Priority",
+            "Start Date",
+            "Status",
+            "Weekly Update"
+          ]
+        },
+        {
+          "id": "3410e160-932f-804e-be1e-d8c4cf69cd04",
+          "title": "Define scope",
+          "url": "https://app.notion.com/p/Define-scope-3410e160932f804ebe1ed8c4cf69cd04",
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:20:00.000Z",
+          "parent": {
+            "type": "data_source_id",
+            "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+          },
+          "property_names": [
+            "Assignee",
+            "Deadline",
+            "Name",
+            "Priority",
+            "Start Date",
+            "Status",
+            "Weekly Update"
+          ]
+        },
+        {
+          "id": "3410e160-932f-804f-b62e-f84e2777d956",
+          "title": "Build roadmap for 8 weeks",
+          "url": "https://app.notion.com/p/Build-roadmap-for-8-weeks-3410e160932f804fb62ef84e2777d956",
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:20:00.000Z",
+          "parent": {
+            "type": "data_source_id",
+            "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+          },
+          "property_names": [
+            "Assignee",
+            "Deadline",
+            "Name",
+            "Priority",
+            "Start Date",
+            "Status",
+            "Weekly Update"
+          ]
+        },
+        {
+          "id": "3410e160-932f-80f1-a736-fa741405bd55",
+          "title": "Define success metrics",
+          "url": "https://app.notion.com/p/Define-success-metrics-3410e160932f80f1a736fa741405bd55",
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:20:00.000Z",
+          "parent": {
+            "type": "data_source_id",
+            "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+          },
+          "property_names": [
+            "Assignee",
+            "Deadline",
+            "Name",
+            "Priority",
+            "Start Date",
+            "Status",
+            "Weekly Update"
+          ]
+        },
+        {
+          "id": "3410e160-932f-80a8-95a7-fcaae43f84ce",
+          "title": "Define data dependencies",
+          "url": "https://app.notion.com/p/Define-data-dependencies-3410e160932f80a895a7fcaae43f84ce",
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:26:00.000Z",
+          "parent": {
+            "type": "data_source_id",
+            "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+          },
+          "property_names": [
+            "Assignee",
+            "Deadline",
+            "Name",
+            "Priority",
+            "Start Date",
+            "Status",
+            "Weekly Update"
+          ]
+        }
+      ],
+      "normalized_tasks": [
+        {
+          "source": "AI Lab Project Management",
+          "notion_page_id": "3410e160-932f-8098-ac8f-f16e29bbcec0",
+          "title": "Identify stakeholders and start conversation",
+          "status": "To Do",
+          "priority": "P1 - High",
+          "start_date": "2026-04-14",
+          "deadline": "2026-04-18",
+          "assignees": [],
+          "weekly_update": null,
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:20:00.000Z",
+          "url": "https://app.notion.com/p/Identify-stakeholders-and-start-conversation-3410e160932f8098ac8ff16e29bbcec0"
+        },
+        {
+          "source": "AI Lab Project Management",
+          "notion_page_id": "3410e160-932f-804e-be1e-d8c4cf69cd04",
+          "title": "Define scope",
+          "status": "To Do",
+          "priority": "P1 - High",
+          "start_date": "2026-04-18",
+          "deadline": "2026-04-25",
+          "assignees": [],
+          "weekly_update": null,
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:20:00.000Z",
+          "url": "https://app.notion.com/p/Define-scope-3410e160932f804ebe1ed8c4cf69cd04"
+        },
+        {
+          "source": "AI Lab Project Management",
+          "notion_page_id": "3410e160-932f-804f-b62e-f84e2777d956",
+          "title": "Build roadmap for 8 weeks",
+          "status": "To Do",
+          "priority": "P1 - High",
+          "start_date": "2026-04-25",
+          "deadline": "2026-05-01",
+          "assignees": [],
+          "weekly_update": null,
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:20:00.000Z",
+          "url": "https://app.notion.com/p/Build-roadmap-for-8-weeks-3410e160932f804fb62ef84e2777d956"
+        },
+        {
+          "source": "AI Lab Project Management",
+          "notion_page_id": "3410e160-932f-80f1-a736-fa741405bd55",
+          "title": "Define success metrics",
+          "status": "To Do",
+          "priority": "P2 - Medium",
+          "start_date": "2026-04-25",
+          "deadline": "2026-05-02",
+          "assignees": [],
+          "weekly_update": null,
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:20:00.000Z",
+          "url": "https://app.notion.com/p/Define-success-metrics-3410e160932f80f1a736fa741405bd55"
+        },
+        {
+          "source": "AI Lab Project Management",
+          "notion_page_id": "3410e160-932f-80a8-95a7-fcaae43f84ce",
+          "title": "Define data dependencies",
+          "status": "To Do",
+          "priority": "P2 - Medium",
+          "start_date": "2026-04-28",
+          "deadline": "2026-05-05",
+          "assignees": [
+            {
+              "name": "Ana Vit\u00f3ria",
+              "email": "anavitoria11@gmail.com"
+            },
+            {
+              "name": "Burcu Magemizo\u011flu",
+              "email": "burcu.magemizoglu@gmail.com"
+            }
+          ],
+          "weekly_update": null,
+          "created_time": "2026-04-13T16:20:00.000Z",
+          "last_edited_time": "2026-04-13T16:26:00.000Z",
+          "url": "https://app.notion.com/p/Define-data-dependencies-3410e160932f80a895a7fcaae43f84ce"
+        }
+      ],
+      "duckdb_sync_preview": {
+        "project_id": 12,
+        "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+        "proposed_new_columns": [
+          {
+            "name": "source_system",
+            "type": "VARCHAR",
+            "example": "notion"
+          },
+          {
+            "name": "source_label",
+            "type": "VARCHAR",
+            "example": "AI Lab Project Management"
+          },
+          {
+            "name": "notion_page_id",
+            "type": "VARCHAR",
+            "example": "3410e160-932f-8098-ac8f-f16e29bbcec0"
+          },
+          {
+            "name": "notion_data_source_id",
+            "type": "VARCHAR",
+            "example": "3410e160-932f-80e8-aa99-000bb8ff420b"
+          },
+          {
+            "name": "notion_url",
+            "type": "VARCHAR",
+            "example": "https://app.notion.com/p/..."
+          },
+          {
+            "name": "external_status",
+            "type": "VARCHAR",
+            "example": "To Do"
+          },
+          {
+            "name": "priority",
+            "type": "VARCHAR",
+            "example": "P1 - High"
+          },
+          {
+            "name": "start_date",
+            "type": "DATE",
+            "example": "2026-04-14"
+          },
+          {
+            "name": "deadline",
+            "type": "DATE",
+            "example": "2026-04-18"
+          },
+          {
+            "name": "assignee_names",
+            "type": "VARCHAR",
+            "example": "Ana Vit\u00f3ria|Burcu Magemizo\u011flu"
+          },
+          {
+            "name": "assignee_emails",
+            "type": "VARCHAR",
+            "example": "anavitoria11@gmail.com|burcu.magemizoglu@gmail.com"
+          },
+          {
+            "name": "weekly_update",
+            "type": "VARCHAR",
+            "example": ""
+          },
+          {
+            "name": "external_created_at",
+            "type": "TIMESTAMP",
+            "example": "2026-04-13T16:20:00.000Z"
+          },
+          {
+            "name": "external_updated_at",
+            "type": "TIMESTAMP",
+            "example": "2026-04-13T16:26:00.000Z"
+          },
+          {
+            "name": "sync_actor",
+            "type": "VARCHAR",
+            "example": "notion_sync"
+          }
+        ],
+        "row_count": 5,
+        "insert_preview": [
+          {
+            "task_id": "8ef7a001-f7ec-4f2f-9574-f4e5171b8740",
+            "project_id": 12,
+            "source_timestamp": "2026-04-13T16:20:00.000Z",
+            "description": "Identify stakeholders and start conversation",
+            "status": "open",
+            "comments": "",
+            "created_at": "2026-04-13T16:20:00.000Z",
+            "created_by": "notion_sync",
+            "updated_at": "2026-04-13T16:20:00.000Z",
+            "updated_by": "notion_sync",
+            "completed_at": null,
+            "completed_by": null,
+            "deleted_at": null,
+            "deleted_by": null,
+            "source_system": "notion",
+            "source_label": "AI Lab Project Management",
+            "notion_page_id": "3410e160-932f-8098-ac8f-f16e29bbcec0",
+            "notion_data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "notion_url": "https://app.notion.com/p/Identify-stakeholders-and-start-conversation-3410e160932f8098ac8ff16e29bbcec0",
+            "external_status": "To Do",
+            "priority": "P1 - High",
+            "start_date": "2026-04-14",
+            "deadline": "2026-04-18",
+            "assignee_names": "",
+            "assignee_emails": "",
+            "weekly_update": "",
+            "external_created_at": "2026-04-13T16:20:00.000Z",
+            "external_updated_at": "2026-04-13T16:20:00.000Z",
+            "sync_actor": "notion_sync"
+          },
+          {
+            "task_id": "a74a0140-9c90-426b-b99d-b04e9b1cea55",
+            "project_id": 12,
+            "source_timestamp": "2026-04-13T16:20:00.000Z",
+            "description": "Define scope",
+            "status": "open",
+            "comments": "",
+            "created_at": "2026-04-13T16:20:00.000Z",
+            "created_by": "notion_sync",
+            "updated_at": "2026-04-13T16:20:00.000Z",
+            "updated_by": "notion_sync",
+            "completed_at": null,
+            "completed_by": null,
+            "deleted_at": null,
+            "deleted_by": null,
+            "source_system": "notion",
+            "source_label": "AI Lab Project Management",
+            "notion_page_id": "3410e160-932f-804e-be1e-d8c4cf69cd04",
+            "notion_data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "notion_url": "https://app.notion.com/p/Define-scope-3410e160932f804ebe1ed8c4cf69cd04",
+            "external_status": "To Do",
+            "priority": "P1 - High",
+            "start_date": "2026-04-18",
+            "deadline": "2026-04-25",
+            "assignee_names": "",
+            "assignee_emails": "",
+            "weekly_update": "",
+            "external_created_at": "2026-04-13T16:20:00.000Z",
+            "external_updated_at": "2026-04-13T16:20:00.000Z",
+            "sync_actor": "notion_sync"
+          },
+          {
+            "task_id": "6a57b95d-06a1-4afe-8f1a-5af1b3a722bc",
+            "project_id": 12,
+            "source_timestamp": "2026-04-13T16:20:00.000Z",
+            "description": "Build roadmap for 8 weeks",
+            "status": "open",
+            "comments": "",
+            "created_at": "2026-04-13T16:20:00.000Z",
+            "created_by": "notion_sync",
+            "updated_at": "2026-04-13T16:20:00.000Z",
+            "updated_by": "notion_sync",
+            "completed_at": null,
+            "completed_by": null,
+            "deleted_at": null,
+            "deleted_by": null,
+            "source_system": "notion",
+            "source_label": "AI Lab Project Management",
+            "notion_page_id": "3410e160-932f-804f-b62e-f84e2777d956",
+            "notion_data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "notion_url": "https://app.notion.com/p/Build-roadmap-for-8-weeks-3410e160932f804fb62ef84e2777d956",
+            "external_status": "To Do",
+            "priority": "P1 - High",
+            "start_date": "2026-04-25",
+            "deadline": "2026-05-01",
+            "assignee_names": "",
+            "assignee_emails": "",
+            "weekly_update": "",
+            "external_created_at": "2026-04-13T16:20:00.000Z",
+            "external_updated_at": "2026-04-13T16:20:00.000Z",
+            "sync_actor": "notion_sync"
+          },
+          {
+            "task_id": "e8d647dd-6900-47d9-af1e-adb0bdb5cbbf",
+            "project_id": 12,
+            "source_timestamp": "2026-04-13T16:20:00.000Z",
+            "description": "Define success metrics",
+            "status": "open",
+            "comments": "",
+            "created_at": "2026-04-13T16:20:00.000Z",
+            "created_by": "notion_sync",
+            "updated_at": "2026-04-13T16:20:00.000Z",
+            "updated_by": "notion_sync",
+            "completed_at": null,
+            "completed_by": null,
+            "deleted_at": null,
+            "deleted_by": null,
+            "source_system": "notion",
+            "source_label": "AI Lab Project Management",
+            "notion_page_id": "3410e160-932f-80f1-a736-fa741405bd55",
+            "notion_data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "notion_url": "https://app.notion.com/p/Define-success-metrics-3410e160932f80f1a736fa741405bd55",
+            "external_status": "To Do",
+            "priority": "P2 - Medium",
+            "start_date": "2026-04-25",
+            "deadline": "2026-05-02",
+            "assignee_names": "",
+            "assignee_emails": "",
+            "weekly_update": "",
+            "external_created_at": "2026-04-13T16:20:00.000Z",
+            "external_updated_at": "2026-04-13T16:20:00.000Z",
+            "sync_actor": "notion_sync"
+          },
+          {
+            "task_id": "98daa4b1-201a-4b71-a3d8-b25093a55c90",
+            "project_id": 12,
+            "source_timestamp": "2026-04-13T16:20:00.000Z",
+            "description": "Define data dependencies",
+            "status": "open",
+            "comments": "",
+            "created_at": "2026-04-13T16:20:00.000Z",
+            "created_by": "notion_sync",
+            "updated_at": "2026-04-13T16:26:00.000Z",
+            "updated_by": "notion_sync",
+            "completed_at": null,
+            "completed_by": null,
+            "deleted_at": null,
+            "deleted_by": null,
+            "source_system": "notion",
+            "source_label": "AI Lab Project Management",
+            "notion_page_id": "3410e160-932f-80a8-95a7-fcaae43f84ce",
+            "notion_data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+            "notion_url": "https://app.notion.com/p/Define-data-dependencies-3410e160932f80a895a7fcaae43f84ce",
+            "external_status": "To Do",
+            "priority": "P2 - Medium",
+            "start_date": "2026-04-28",
+            "deadline": "2026-05-05",
+            "assignee_names": "Ana Vit\u00f3ria|Burcu Magemizo\u011flu",
+            "assignee_emails": "anavitoria11@gmail.com|burcu.magemizoglu@gmail.com",
+            "weekly_update": "",
+            "external_created_at": "2026-04-13T16:20:00.000Z",
+            "external_updated_at": "2026-04-13T16:26:00.000Z",
+            "sync_actor": "notion_sync"
+          }
+        ]
+      },
+      "raw_body": {
+        "object": "list",
+        "results": [
+          {
+            "object": "page",
+            "id": "3410e160-932f-8098-ac8f-f16e29bbcec0",
+            "created_time": "2026-04-13T16:20:00.000Z",
+            "last_edited_time": "2026-04-13T16:20:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "cover": null,
+            "icon": null,
+            "parent": {
+              "type": "data_source_id",
+              "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+              "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+            },
+            "in_trash": false,
+            "is_archived": false,
+            "is_locked": false,
+            "properties": {
+              "Weekly Update": {
+                "id": "%3BX%3EA",
+                "type": "rich_text",
+                "rich_text": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "",
+                    "href": null
+                  }
+                ]
+              },
+              "Start Date": {
+                "id": "Bh%7BL",
+                "type": "date",
+                "date": {
+                  "start": "2026-04-14",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Status": {
+                "id": "%5Cb%3AG",
+                "type": "status",
+                "status": {
+                  "id": "YE{a",
+                  "name": "To Do",
+                  "color": "blue"
+                }
+              },
+              "Deadline": {
+                "id": "%5Ei%3Bp",
+                "type": "date",
+                "date": {
+                  "start": "2026-04-18",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Priority": {
+                "id": "_ZKW",
+                "type": "select",
+                "select": {
+                  "id": "Gent",
+                  "name": "P1 - High",
+                  "color": "red"
+                }
+              },
+              "Assignee": {
+                "id": "k%3DE%5E",
+                "type": "people",
+                "people": []
+              },
+              "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "Identify stakeholders and start conversation",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "Identify stakeholders and start conversation",
+                    "href": null
+                  }
+                ]
+              }
+            },
+            "url": "https://app.notion.com/p/Identify-stakeholders-and-start-conversation-3410e160932f8098ac8ff16e29bbcec0",
+            "public_url": null
+          },
+          {
+            "object": "page",
+            "id": "3410e160-932f-804e-be1e-d8c4cf69cd04",
+            "created_time": "2026-04-13T16:20:00.000Z",
+            "last_edited_time": "2026-04-13T16:20:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "cover": null,
+            "icon": null,
+            "parent": {
+              "type": "data_source_id",
+              "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+              "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+            },
+            "in_trash": false,
+            "is_archived": false,
+            "is_locked": false,
+            "properties": {
+              "Weekly Update": {
+                "id": "%3BX%3EA",
+                "type": "rich_text",
+                "rich_text": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "",
+                    "href": null
+                  }
+                ]
+              },
+              "Start Date": {
+                "id": "Bh%7BL",
+                "type": "date",
+                "date": {
+                  "start": "2026-04-18",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Status": {
+                "id": "%5Cb%3AG",
+                "type": "status",
+                "status": {
+                  "id": "YE{a",
+                  "name": "To Do",
+                  "color": "blue"
+                }
+              },
+              "Deadline": {
+                "id": "%5Ei%3Bp",
+                "type": "date",
+                "date": {
+                  "start": "2026-04-25",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Priority": {
+                "id": "_ZKW",
+                "type": "select",
+                "select": {
+                  "id": "Gent",
+                  "name": "P1 - High",
+                  "color": "red"
+                }
+              },
+              "Assignee": {
+                "id": "k%3DE%5E",
+                "type": "people",
+                "people": []
+              },
+              "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "Define scope",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "Define scope",
+                    "href": null
+                  }
+                ]
+              }
+            },
+            "url": "https://app.notion.com/p/Define-scope-3410e160932f804ebe1ed8c4cf69cd04",
+            "public_url": null
+          },
+          {
+            "object": "page",
+            "id": "3410e160-932f-804f-b62e-f84e2777d956",
+            "created_time": "2026-04-13T16:20:00.000Z",
+            "last_edited_time": "2026-04-13T16:20:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "cover": null,
+            "icon": null,
+            "parent": {
+              "type": "data_source_id",
+              "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+              "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+            },
+            "in_trash": false,
+            "is_archived": false,
+            "is_locked": false,
+            "properties": {
+              "Weekly Update": {
+                "id": "%3BX%3EA",
+                "type": "rich_text",
+                "rich_text": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "",
+                    "href": null
+                  }
+                ]
+              },
+              "Start Date": {
+                "id": "Bh%7BL",
+                "type": "date",
+                "date": {
+                  "start": "2026-04-25",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Status": {
+                "id": "%5Cb%3AG",
+                "type": "status",
+                "status": {
+                  "id": "YE{a",
+                  "name": "To Do",
+                  "color": "blue"
+                }
+              },
+              "Deadline": {
+                "id": "%5Ei%3Bp",
+                "type": "date",
+                "date": {
+                  "start": "2026-05-01",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Priority": {
+                "id": "_ZKW",
+                "type": "select",
+                "select": {
+                  "id": "Gent",
+                  "name": "P1 - High",
+                  "color": "red"
+                }
+              },
+              "Assignee": {
+                "id": "k%3DE%5E",
+                "type": "people",
+                "people": []
+              },
+              "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "Build roadmap for 8 weeks",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "Build roadmap for 8 weeks",
+                    "href": null
+                  }
+                ]
+              }
+            },
+            "url": "https://app.notion.com/p/Build-roadmap-for-8-weeks-3410e160932f804fb62ef84e2777d956",
+            "public_url": null
+          },
+          {
+            "object": "page",
+            "id": "3410e160-932f-80f1-a736-fa741405bd55",
+            "created_time": "2026-04-13T16:20:00.000Z",
+            "last_edited_time": "2026-04-13T16:20:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "cover": null,
+            "icon": null,
+            "parent": {
+              "type": "data_source_id",
+              "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+              "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+            },
+            "in_trash": false,
+            "is_archived": false,
+            "is_locked": false,
+            "properties": {
+              "Weekly Update": {
+                "id": "%3BX%3EA",
+                "type": "rich_text",
+                "rich_text": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "",
+                    "href": null
+                  }
+                ]
+              },
+              "Start Date": {
+                "id": "Bh%7BL",
+                "type": "date",
+                "date": {
+                  "start": "2026-04-25",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Status": {
+                "id": "%5Cb%3AG",
+                "type": "status",
+                "status": {
+                  "id": "YE{a",
+                  "name": "To Do",
+                  "color": "blue"
+                }
+              },
+              "Deadline": {
+                "id": "%5Ei%3Bp",
+                "type": "date",
+                "date": {
+                  "start": "2026-05-02",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Priority": {
+                "id": "_ZKW",
+                "type": "select",
+                "select": {
+                  "id": "FITK",
+                  "name": "P2 - Medium",
+                  "color": "yellow"
+                }
+              },
+              "Assignee": {
+                "id": "k%3DE%5E",
+                "type": "people",
+                "people": []
+              },
+              "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "Define success metrics",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "Define success metrics",
+                    "href": null
+                  }
+                ]
+              }
+            },
+            "url": "https://app.notion.com/p/Define-success-metrics-3410e160932f80f1a736fa741405bd55",
+            "public_url": null
+          },
+          {
+            "object": "page",
+            "id": "3410e160-932f-80a8-95a7-fcaae43f84ce",
+            "created_time": "2026-04-13T16:20:00.000Z",
+            "last_edited_time": "2026-04-13T16:26:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09"
+            },
+            "cover": null,
+            "icon": null,
+            "parent": {
+              "type": "data_source_id",
+              "data_source_id": "3410e160-932f-80e8-aa99-000bb8ff420b",
+              "database_id": "3410e160-932f-80fb-8c2c-c0c917c4e21a"
+            },
+            "in_trash": false,
+            "is_archived": false,
+            "is_locked": false,
+            "properties": {
+              "Weekly Update": {
+                "id": "%3BX%3EA",
+                "type": "rich_text",
+                "rich_text": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "",
+                    "href": null
+                  }
+                ]
+              },
+              "Start Date": {
+                "id": "Bh%7BL",
+                "type": "date",
+                "date": {
+                  "start": "2026-04-28",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Status": {
+                "id": "%5Cb%3AG",
+                "type": "status",
+                "status": {
+                  "id": "YE{a",
+                  "name": "To Do",
+                  "color": "blue"
+                }
+              },
+              "Deadline": {
+                "id": "%5Ei%3Bp",
+                "type": "date",
+                "date": {
+                  "start": "2026-05-05",
+                  "end": null,
+                  "time_zone": null
+                }
+              },
+              "Priority": {
+                "id": "_ZKW",
+                "type": "select",
+                "select": {
+                  "id": "FITK",
+                  "name": "P2 - Medium",
+                  "color": "yellow"
+                }
+              },
+              "Assignee": {
+                "id": "k%3DE%5E",
+                "type": "people",
+                "people": [
+                  {
+                    "object": "user",
+                    "id": "5777611f-f255-4b5d-b9e8-d0e4f9105e09",
+                    "name": "Ana Vit\u00f3ria",
+                    "avatar_url": "https://lh3.googleusercontent.com/a-/AOh14GihjZHNWQ6PDvia1BSqHK4W5ZhyjJjm3cCvR5NcmUM=s100",
+                    "type": "person",
+                    "person": {
+                      "email": "anavitoria11@gmail.com"
+                    }
+                  },
+                  {
+                    "object": "user",
+                    "id": "33ed872b-594c-81fd-a40c-00025f5d1264",
+                    "name": "Burcu Magemizo\u011flu",
+                    "avatar_url": null,
+                    "type": "person",
+                    "person": {
+                      "email": "burcu.magemizoglu@gmail.com"
+                    }
+                  }
+                ]
+              },
+              "Name": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "Define data dependencies",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "Define data dependencies",
+                    "href": null
+                  }
+                ]
+              }
+            },
+            "url": "https://app.notion.com/p/Define-data-dependencies-3410e160932f80a895a7fcaae43f84ce",
+            "public_url": null
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "page_or_data_source",
+        "page_or_data_source": {},
+        "request_id": "9759eac4-7548-4e6c-8b3b-4d901493e972"
+      }
+    }
+  },
+  "sync_summary": {
+    "inserted": 5,
+    "updated": 0,
+    "active_notion_tasks_for_project": 5,
+    "synced_notion_page_ids": [
+      "3410e160-932f-8098-ac8f-f16e29bbcec0",
+      "3410e160-932f-804e-be1e-d8c4cf69cd04",
+      "3410e160-932f-804f-b62e-f84e2777d956",
+      "3410e160-932f-80f1-a736-fa741405bd55",
+      "3410e160-932f-80a8-95a7-fcaae43f84ce"
+    ],
+    "synced_at": "2026-04-14T18:53:23.768183Z"
+  }
+}

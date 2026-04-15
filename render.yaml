@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install uv && uv sync --frozen
-    startCommand: uv run gunicorn app:server
+    startCommand: uv run gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.8"
@@ -14,3 +14,15 @@ services:
         value: ai_lab_dashboard
       - key: MOTHERDUCK_TOKEN
         sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_CLIENT_SECRET
+        sync: false
+      - key: AZURE_TENANT_ID
+        sync: false
+      - key: AZURE_REDIRECT_URI
+        sync: false
+      - key: ALLOWED_LOGIN_EMAILS
+        value: kchristodoulou@london.edu
