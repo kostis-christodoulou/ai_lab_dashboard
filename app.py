@@ -80,9 +80,14 @@ def quote_identifier(value: str) -> str:
 def connect_db(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     token = clean_text(os.getenv("MOTHERDUCK_TOKEN", ""))
     if not token:
-        raise RuntimeError("MOTHERDUCK_TOKEN is required. This app is configured for MotherDuck only.")
+        raise RuntimeError(
+            "MOTHERDUCK_TOKEN is required. This app is configured for MotherDuck only."
+        )
 
-    database_name = clean_text(os.getenv("MOTHERDUCK_DB", DEFAULT_MOTHERDUCK_DB)) or DEFAULT_MOTHERDUCK_DB
+    database_name = (
+        clean_text(os.getenv("MOTHERDUCK_DB", DEFAULT_MOTHERDUCK_DB))
+        or DEFAULT_MOTHERDUCK_DB
+    )
     conn = duckdb.connect(f"md:?motherduck_token={token}")
     if not read_only:
         conn.execute(f"CREATE DATABASE IF NOT EXISTS {quote_identifier(database_name)}")
@@ -103,7 +108,12 @@ def parse_allowed_emails() -> set[str]:
 
 
 def azure_sso_enabled() -> bool:
-    return clean_text(os.getenv("AZURE_SSO_ENABLED", "false")).lower() in {"1", "true", "yes", "on"}
+    return clean_text(os.getenv("AZURE_SSO_ENABLED", "false")).lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def get_current_user() -> dict[str, str] | None:
@@ -196,7 +206,15 @@ def summarize_problem(text: str, limit: int = 125) -> str:
         return "No summary provided."
     first_sentence = re.split(r"(?<=[.!?])\s+", cleaned, maxsplit=1)[0].strip()
     candidate = first_sentence or cleaned
-    for separator in [": ", " - ", " — ", ", but ", ", with ", ", due to ", ", resulting in "]:
+    for separator in [
+        ": ",
+        " - ",
+        " — ",
+        ", but ",
+        ", with ",
+        ", due to ",
+        ", resulting in ",
+    ]:
         if separator in candidate:
             candidate = candidate.split(separator, 1)[0].strip()
             break
@@ -209,7 +227,9 @@ def summarize_interaction_content(text: str, limit: int = 110) -> str:
     cleaned = clean_text(text)
     if not cleaned:
         return "Empty interaction."
-    subject_match = re.search(r"^Subject:\s*(.+)$", cleaned, flags=re.IGNORECASE | re.MULTILINE)
+    subject_match = re.search(
+        r"^Subject:\s*(.+)$", cleaned, flags=re.IGNORECASE | re.MULTILINE
+    )
     if subject_match:
         summary = subject_match.group(1).strip()
     else:
@@ -234,7 +254,10 @@ def clean_interaction_content(text: str) -> str:
         if not line:
             cleaned_lines.append("")
             continue
-        if any(re.match(pattern, line, flags=re.IGNORECASE) for pattern in artifact_patterns):
+        if any(
+            re.match(pattern, line, flags=re.IGNORECASE)
+            for pattern in artifact_patterns
+        ):
             continue
         if re.fullmatch(r"[\W_]+", line):
             continue
@@ -249,13 +272,18 @@ def clean_interaction_content(text: str) -> str:
         for previous_index in range(0, current_index - 2):
             if significant_lines[previous_index] != current_line:
                 continue
-            window = min(6, len(significant_lines) - current_index, len(significant_lines) - previous_index)
+            window = min(
+                6,
+                len(significant_lines) - current_index,
+                len(significant_lines) - previous_index,
+            )
             if window < 3:
                 continue
             matches = sum(
                 1
                 for offset in range(window)
-                if significant_lines[previous_index + offset] == significant_lines[current_index + offset]
+                if significant_lines[previous_index + offset]
+                == significant_lines[current_index + offset]
             )
             if matches >= 3:
                 duplicate_start = current_line
@@ -283,11 +311,16 @@ def clean_interaction_content(text: str) -> str:
         for previous_index in range(current_index):
             if non_empty_lines[previous_index] != current_line:
                 continue
-            next_window = min(3, len(non_empty_lines) - current_index, len(non_empty_lines) - previous_index)
+            next_window = min(
+                3,
+                len(non_empty_lines) - current_index,
+                len(non_empty_lines) - previous_index,
+            )
             matches = sum(
                 1
                 for offset in range(next_window)
-                if non_empty_lines[previous_index + offset] == non_empty_lines[current_index + offset]
+                if non_empty_lines[previous_index + offset]
+                == non_empty_lines[current_index + offset]
             )
             if matches >= 2:
                 duplicate_restart = current_line
@@ -352,18 +385,29 @@ def extract_tasks_from_interaction(text: str) -> list[str]:
         if not words or len(words) > 5:
             return False
         lowered = line.lower()
-        return line.isupper() or " and " in lowered or " team" in lowered or lowered.endswith(" team")
+        return (
+            line.isupper()
+            or " and " in lowered
+            or " team" in lowered
+            or lowered.endswith(" team")
+        )
 
     for line in cleaned.splitlines():
         stripped = line.strip()
         if not stripped:
             heading_context = None
             continue
-        if re.match(r"^(from|to|cc|bcc|subject|date|sent):", stripped, flags=re.IGNORECASE):
+        if re.match(
+            r"^(from|to|cc|bcc|subject|date|sent):", stripped, flags=re.IGNORECASE
+        ):
             continue
         bullet_match = re.match(r"^[-*•]\s+(.+)$", stripped)
         numbered_match = re.match(r"^\d+[.)]\s+(.+)$", stripped)
-        action_match = re.match(r"^(?:todo|to do|action item|next step|next steps)[:\-]?\s*(.+)$", stripped, flags=re.IGNORECASE)
+        action_match = re.match(
+            r"^(?:todo|to do|action item|next step|next steps)[:\-]?\s*(.+)$",
+            stripped,
+            flags=re.IGNORECASE,
+        )
         if bullet_match:
             add_task(bullet_match.group(1))
             continue
@@ -376,7 +420,11 @@ def extract_tasks_from_interaction(text: str) -> list[str]:
         if is_heading(stripped):
             heading_context = stripped
             continue
-        if heading_context and len(stripped) < 120 and not re.search(r"[.!?]$", stripped):
+        if (
+            heading_context
+            and len(stripped) < 120
+            and not re.search(r"[.!?]$", stripped)
+        ):
             add_task(f"{heading_context}: {stripped}")
             continue
         content_lines.append(stripped)
@@ -386,9 +434,22 @@ def extract_tasks_from_interaction(text: str) -> list[str]:
         lowered = sentence.lower().strip()
         if not lowered:
             continue
-        if any(lowered.startswith(prefix) for prefix in ["i hope ", "thank you ", "best,"]):
+        if any(
+            lowered.startswith(prefix) for prefix in ["i hope ", "thank you ", "best,"]
+        ):
             continue
-        if any(phrase in lowered for phrase in ["need to ", "needs to ", "please ", "follow up", "action item", "next step", "todo"]):
+        if any(
+            phrase in lowered
+            for phrase in [
+                "need to ",
+                "needs to ",
+                "please ",
+                "follow up",
+                "action item",
+                "next step",
+                "todo",
+            ]
+        ):
             add_task(sentence)
     return tasks
 
@@ -414,7 +475,9 @@ def extract_interaction_timestamp(text: str) -> datetime:
 
 def parse_team_details(lead_email: str, raw_members: str) -> tuple[list[str], str]:
     all_text = f"{clean_text(lead_email)} {clean_text(raw_members)}"
-    emails = sorted(set(re.findall(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", all_text)))
+    emails = sorted(
+        set(re.findall(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", all_text))
+    )
     degrees = []
     for email in emails:
         match = re.search(r"\.([a-zA-Z]+)(\d{4})@", email)
@@ -433,12 +496,16 @@ def load_projects_df() -> pd.DataFrame:
     df["id"] = df["id"].astype(int)
     lead_details = df["lead_raw"].apply(extract_name_and_email)
     df["lead"] = lead_details.str[0].replace("", pd.NA).fillna(df["submitter_name"])
-    df["lead_email"] = lead_details.str[1].replace("", pd.NA).fillna(df["submitter_email"])
+    df["lead_email"] = (
+        lead_details.str[1].replace("", pd.NA).fillna(df["submitter_email"])
+    )
     df["mentor"] = df["mentor"].apply(format_mentor_text)
     df["summary"] = df["id"].map(SUMMARY_OVERRIDES)
     df["summary"] = df["summary"].fillna(df["full_problem"].apply(summarize_problem))
     df = df[~df["id"].isin(EXCLUDED_PROJECT_IDS)].copy()
-    team_details = df.apply(lambda row: parse_team_details(row["lead_email"], row["raw_members"]), axis=1)
+    team_details = df.apply(
+        lambda row: parse_team_details(row["lead_email"], row["raw_members"]), axis=1
+    )
     df["all_emails"] = team_details.str[0]
     df["team_composition"] = team_details.str[1]
     return df.sort_values(by="name").reset_index(drop=True)
@@ -475,7 +542,8 @@ def initialize_database(projects_df: pd.DataFrame) -> None:
             """
         )
         interaction_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info('interactions')").fetchall()
+            row[1]
+            for row in conn.execute("PRAGMA table_info('interactions')").fetchall()
         }
         if "interaction_id" not in interaction_columns:
             conn.execute("ALTER TABLE interactions ADD COLUMN interaction_id VARCHAR")
@@ -666,15 +734,23 @@ def fetch_task_by_id(task_id: str) -> dict[str, str] | None:
     return {
         "task_id": found_task_id,
         "project_id": str(project_id),
-        "timestamp": timestamp.strftime("%d %b %Y, %H:%M") if isinstance(timestamp, datetime) else str(timestamp),
+        "timestamp": timestamp.strftime("%d %b %Y, %H:%M")
+        if isinstance(timestamp, datetime)
+        else str(timestamp),
         "description": description,
         "status": status,
         "comments": comments or "",
-        "created_at": created_at.strftime("%d %b %Y, %H:%M") if isinstance(created_at, datetime) else "",
+        "created_at": created_at.strftime("%d %b %Y, %H:%M")
+        if isinstance(created_at, datetime)
+        else "",
         "created_by": created_by or "",
-        "updated_at": updated_at.strftime("%d %b %Y, %H:%M") if isinstance(updated_at, datetime) else "",
+        "updated_at": updated_at.strftime("%d %b %Y, %H:%M")
+        if isinstance(updated_at, datetime)
+        else "",
         "updated_by": updated_by or "",
-        "completed_timestamp": completed_at.strftime("%d %b %Y, %H:%M") if isinstance(completed_at, datetime) else "",
+        "completed_timestamp": completed_at.strftime("%d %b %Y, %H:%M")
+        if isinstance(completed_at, datetime)
+        else "",
         "completed_by": completed_by or "",
     }
 
@@ -693,7 +769,9 @@ def fetch_project_interactions(project_id: int) -> list[dict[str, str]]:
     return [
         {
             "interaction_id": interaction_id,
-            "timestamp": timestamp.strftime("%d %b %Y, %H:%M") if isinstance(timestamp, datetime) else str(timestamp),
+            "timestamp": timestamp.strftime("%d %b %Y, %H:%M")
+            if isinstance(timestamp, datetime)
+            else str(timestamp),
             "summary": summarize_interaction_content(content),
             "content": content,
         }
@@ -701,7 +779,9 @@ def fetch_project_interactions(project_id: int) -> list[dict[str, str]]:
     ]
 
 
-def fetch_project_tasks(project_id: int, status_filter: str | None = None) -> list[dict[str, str]]:
+def fetch_project_tasks(
+    project_id: int, status_filter: str | None = None
+) -> list[dict[str, str]]:
     query = """
         SELECT
             task_id,
@@ -729,15 +809,23 @@ def fetch_project_tasks(project_id: int, status_filter: str | None = None) -> li
     return [
         {
             "task_id": task_id,
-            "timestamp": timestamp.strftime("%d %b %Y, %H:%M") if isinstance(timestamp, datetime) else str(timestamp),
+            "timestamp": timestamp.strftime("%d %b %Y, %H:%M")
+            if isinstance(timestamp, datetime)
+            else str(timestamp),
             "description": description,
             "status": status,
             "comments": comments or "",
-            "created_at": created_at.strftime("%d %b %Y, %H:%M") if isinstance(created_at, datetime) else "",
+            "created_at": created_at.strftime("%d %b %Y, %H:%M")
+            if isinstance(created_at, datetime)
+            else "",
             "created_by": created_by or "",
-            "updated_at": updated_at.strftime("%d %b %Y, %H:%M") if isinstance(updated_at, datetime) else "",
+            "updated_at": updated_at.strftime("%d %b %Y, %H:%M")
+            if isinstance(updated_at, datetime)
+            else "",
             "updated_by": updated_by or "",
-            "completed_timestamp": completed_at.strftime("%d %b %Y, %H:%M") if isinstance(completed_at, datetime) else "",
+            "completed_timestamp": completed_at.strftime("%d %b %Y, %H:%M")
+            if isinstance(completed_at, datetime)
+            else "",
             "completed_by": completed_by or "",
         }
         for task_id, timestamp, description, status, comments, created_at, created_by, updated_at, updated_by, completed_at, completed_by in rows
@@ -757,7 +845,9 @@ def fetch_task_status_counts() -> dict[int, dict[str, int]]:
         ).fetchall()
     counts: dict[int, dict[str, int]] = {}
     for project_id, status, count in rows:
-        project_counts = counts.setdefault(int(project_id), {"open": 0, "in_progress": 0, "done": 0})
+        project_counts = counts.setdefault(
+            int(project_id), {"open": 0, "in_progress": 0, "done": 0}
+        )
         project_counts[str(status)] = int(count)
     return counts
 
@@ -799,7 +889,9 @@ def add_interaction(project_id: int, content: str, actor_email: str) -> None:
             )
 
 
-def add_manual_task(project_id: int, description: str, comments: str = "", actor_email: str = "system") -> None:
+def add_manual_task(
+    project_id: int, description: str, comments: str = "", actor_email: str = "system"
+) -> None:
     now = datetime.now()
     with connect_db() as conn:
         conn.execute(
@@ -810,7 +902,17 @@ def add_manual_task(project_id: int, description: str, comments: str = "", actor
             )
             VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, NULL, NULL)
             """,
-            [str(uuid.uuid4()), project_id, now, description, comments, now, actor_email, now, actor_email],
+            [
+                str(uuid.uuid4()),
+                project_id,
+                now,
+                description,
+                comments,
+                now,
+                actor_email,
+                now,
+                actor_email,
+            ],
         )
 
 
@@ -827,7 +929,17 @@ def update_task(task_id: str, status: str, comments: str, actor_email: str) -> N
                 deleted_by = CASE WHEN ? != 'deleted' THEN NULL ELSE deleted_by END
             WHERE task_id = ?
             """,
-            [status, comments, now, actor_email, completed_at, completed_by, status, status, task_id],
+            [
+                status,
+                comments,
+                now,
+                actor_email,
+                completed_at,
+                completed_by,
+                status,
+                status,
+                task_id,
+            ],
         )
 
 
@@ -868,26 +980,26 @@ def base_html(title: str, body: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{escape(title)}</title>
   <style>
-    body {{ margin:0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:{COLORS['background']}; color:#1f2937; }}
-    .header {{ background:{COLORS['primary']}; color:white; padding:14px 24px; }}
+    body {{ margin:0; font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:{COLORS["background"]}; color:#1f2937; }}
+    .header {{ background:{COLORS["primary"]}; color:white; padding:14px 24px; }}
     .header-bar {{ max-width:1280px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:16px; }}
     .header h1 {{ margin:0; font-size:1.4rem; }}
     .user-meta {{ display:flex; align-items:center; gap:12px; font-size:.85rem; flex-wrap:wrap; justify-content:flex-end; }}
     .header-link {{ color:white; text-decoration:none; border:1px solid rgba(255,255,255,.35); padding:6px 10px; border-radius:999px; }}
     .container {{ max-width:1280px; margin:0 auto; padding:20px 24px 40px; }}
-    .card {{ background:white; border:1px solid {COLORS['border']}; border-radius:12px; box-shadow:0 6px 18px rgba(15,23,42,.06); }}
+    .card {{ background:white; border:1px solid {COLORS["border"]}; border-radius:12px; box-shadow:0 6px 18px rgba(15,23,42,.06); }}
     .table {{ width:100%; border-collapse:collapse; }}
     .table th, .table td {{ padding:12px 10px; border-bottom:1px solid #e5e7eb; vertical-align:top; }}
     .table th {{ text-align:left; font-size:.78rem; color:#6b7280; letter-spacing:.02em; }}
-    .badge {{ display:inline-block; padding:3px 8px; border:1px solid {COLORS['border']}; border-radius:999px; font-size:.74rem; background:#f8fafc; }}
-    .btn, button {{ display:inline-block; border:none; border-radius:8px; padding:8px 12px; font-size:.9rem; cursor:pointer; background:{COLORS['primary']}; color:white; text-decoration:none; }}
-    .btn-secondary {{ background:white; color:{COLORS['primary']}; border:1px solid {COLORS['border']}; }}
-    .btn-link {{ background:none; color:{COLORS['primary']}; padding:0; }}
+    .badge {{ display:inline-block; padding:3px 8px; border:1px solid {COLORS["border"]}; border-radius:999px; font-size:.74rem; background:#f8fafc; }}
+    .btn, button {{ display:inline-block; border:none; border-radius:8px; padding:8px 12px; font-size:.9rem; cursor:pointer; background:{COLORS["primary"]}; color:white; text-decoration:none; }}
+    .btn-secondary {{ background:white; color:{COLORS["primary"]}; border:1px solid {COLORS["border"]}; }}
+    .btn-link {{ background:none; color:{COLORS["primary"]}; padding:0; }}
     .danger {{ color:#b91c1c; }}
-    .muted {{ color:{COLORS['muted']}; }}
+    .muted {{ color:{COLORS["muted"]}; }}
     .tabs {{ display:flex; gap:10px; margin:18px 0 20px; }}
-    .tab {{ padding:10px 14px; border-radius:999px; border:1px solid {COLORS['border']}; background:white; color:{COLORS['primary']}; text-decoration:none; font-weight:600; }}
-    .tab.active {{ background:{COLORS['primary']}; color:white; border-color:{COLORS['primary']}; }}
+    .tab {{ padding:10px 14px; border-radius:999px; border:1px solid {COLORS["border"]}; background:white; color:{COLORS["primary"]}; text-decoration:none; font-weight:600; }}
+    .tab.active {{ background:{COLORS["primary"]}; color:white; border-color:{COLORS["primary"]}; }}
     .grid-2 {{ display:grid; grid-template-columns:2fr 1fr; gap:20px; }}
     .stack > * + * {{ margin-top:16px; }}
     textarea, input, select {{ width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:8px; padding:10px 12px; font:inherit; }}
@@ -903,7 +1015,7 @@ def base_html(title: str, body: str) -> str:
   </style>
 </head>
 <body>
-  <div class="header"><div class="header-bar"><h1>2026 AI Lab Dashboard</h1>{user_html}</div></div>
+  <div class="header"><div class="header-bar"><h1>2026 LBS AI Lab Dashboard</h1>{user_html}</div></div>
   <div class="container">{body}</div>
 </body>
 </html>"""
@@ -913,6 +1025,7 @@ def project_tabs(project_id: int, active_tab: str) -> str:
     def tab(label: str, tab_id: str) -> str:
         cls = "tab active" if active_tab == tab_id else "tab"
         return f'<a class="{cls}" href="/project/{project_id}?tab={tab_id}">{escape(label)}</a>'
+
     return f'<div class="tabs">{tab("Tasks", "tasks")}{tab("Interactions", "interactions")}{tab("Project Details", "details")}</div>'
 
 
@@ -927,13 +1040,13 @@ def render_home() -> str:
         rows.append(
             f"""
             <tr>
-              <td><strong style="color:{COLORS['primary']}">{escape(str(project['name']))}</strong><br><span class="small muted">{escape(str(project['summary']))}</span></td>
-              <td><div class="small"><strong>{escape(str(project['lead']))}</strong><br><span class="badge">{escape(str(project['team_composition']))}</span></div></td>
-              <td class="small" style="white-space:pre-wrap;color:{COLORS['primary']}">{mentor}</td>
+              <td><strong style="color:{COLORS["primary"]}">{escape(str(project["name"]))}</strong><br><span class="small muted">{escape(str(project["summary"]))}</span></td>
+              <td><div class="small"><strong>{escape(str(project["lead"]))}</strong><br><span class="badge">{escape(str(project["team_composition"]))}</span></div></td>
+              <td class="small" style="white-space:pre-wrap;color:{COLORS["primary"]}">{mentor}</td>
               <td class="small" style="text-align:center;font-weight:700;color:{notion_color};">{notion_icon}</td>
-              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=open">{project['todo_task_count']}</a></td>
-              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=in_progress">{project['wip_task_count']}</a></td>
-              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=done">{project['done_task_count']}</a></td>
+              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=open">{project["todo_task_count"]}</a></td>
+              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=in_progress">{project["wip_task_count"]}</a></td>
+              <td><a class="badge pillcount" href="/project/{project_id}?tab=tasks&status=done">{project["done_task_count"]}</a></td>
               <td><a class="btn btn-secondary" href="/project/{project_id}">View</a></td>
             </tr>
             """
@@ -953,14 +1066,19 @@ def render_home() -> str:
               <th>Action</th>
             </tr>
           </thead>
-          <tbody>{''.join(rows)}</tbody>
+          <tbody>{"".join(rows)}</tbody>
         </table>
       </div>
     """
     return base_html("AI Lab Dashboard", body)
 
 
-def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, status_filter: str = "open", message: str = "") -> str:
+def render_tasks_tab(
+    project: dict[str, object],
+    selected_task_id: str | None,
+    status_filter: str = "open",
+    message: str = "",
+) -> str:
     current_status = status_filter if status_filter in TASK_STATUS_LABELS else "open"
     visible_tasks = fetch_project_tasks(int(project["id"]), current_status)
     selected_task = fetch_task_by_id(selected_task_id) if selected_task_id else None
@@ -971,48 +1089,51 @@ def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, s
         f'<a class="{"tab active" if current_status == status else "tab"}" href="/project/{project["id"]}?tab=tasks&status={status}">{label}</a>'
         for status, label in TASK_STATUS_LABELS.items()
     )
-    task_rows = "".join(
-        f"""
+    task_rows = (
+        "".join(
+            f"""
         <tr>
-          <td>{escape(task['description'])}</td>
-          <td class="small muted">{escape(task['timestamp'])}</td>
-          <td class="small muted">{escape(task['status'].replace('_', ' ').title())}</td>
-          <td class="small muted">{escape(task['completed_timestamp'] or '-')}</td>
-          <td><a class="btn-link" href="/project/{project['id']}?tab=tasks&status={current_status}&task={task['task_id']}">Manage</a></td>
+          <td>{escape(task["description"])}</td>
+          <td class="small muted">{escape(task["timestamp"])}</td>
+          <td class="small muted">{escape(task["status"].replace("_", " ").title())}</td>
+          <td class="small muted">{escape(task["completed_timestamp"] or "-")}</td>
+          <td><a class="btn-link" href="/project/{project["id"]}?tab=tasks&status={current_status}&task={task["task_id"]}">Manage</a></td>
         </tr>
         """
-        for task in visible_tasks
-    ) or f'<tr><td colspan="5" class="muted">No {escape(TASK_STATUS_LABELS[current_status].lower())} tasks for this project yet.</td></tr>'
+            for task in visible_tasks
+        )
+        or f'<tr><td colspan="5" class="muted">No {escape(TASK_STATUS_LABELS[current_status].lower())} tasks for this project yet.</td></tr>'
+    )
     editor = """
       <div class="muted">Click a task to manage its status and comments.</div>
     """
     if selected_task:
         editor = f"""
-          <form method="post" action="/project/{project['id']}/tasks/update" class="stack">
-            <input type="hidden" name="task_id" value="{escape(selected_task['task_id'])}">
+          <form method="post" action="/project/{project["id"]}/tasks/update" class="stack">
+            <input type="hidden" name="task_id" value="{escape(selected_task["task_id"])}">
             <input type="hidden" name="tab" value="tasks">
             <input type="hidden" name="status_filter" value="{escape(current_status)}">
-            <div><strong style="color:{COLORS['primary']}">{escape(selected_task['description'])}</strong></div>
-            <div class="small"><strong>Date Opened:</strong> {escape(selected_task['timestamp'])}</div>
-            <div class="small"><strong>Created In App:</strong> {escape(selected_task['created_at'] or selected_task['timestamp'])}</div>
-            <div class="small"><strong>Created By:</strong> {escape(selected_task['created_by'] or '-')}</div>
-            <div class="small"><strong>Last Updated:</strong> {escape(selected_task['updated_at'] or '-')}</div>
-            <div class="small"><strong>Last Updated By:</strong> {escape(selected_task['updated_by'] or '-')}</div>
-            <div class="small"><strong>Date Completed:</strong> {escape(selected_task['completed_timestamp'] or '-')}</div>
-            <div class="small"><strong>Completed By:</strong> {escape(selected_task['completed_by'] or '-')}</div>
+            <div><strong style="color:{COLORS["primary"]}">{escape(selected_task["description"])}</strong></div>
+            <div class="small"><strong>Date Opened:</strong> {escape(selected_task["timestamp"])}</div>
+            <div class="small"><strong>Created In App:</strong> {escape(selected_task["created_at"] or selected_task["timestamp"])}</div>
+            <div class="small"><strong>Created By:</strong> {escape(selected_task["created_by"] or "-")}</div>
+            <div class="small"><strong>Last Updated:</strong> {escape(selected_task["updated_at"] or "-")}</div>
+            <div class="small"><strong>Last Updated By:</strong> {escape(selected_task["updated_by"] or "-")}</div>
+            <div class="small"><strong>Date Completed:</strong> {escape(selected_task["completed_timestamp"] or "-")}</div>
+            <div class="small"><strong>Completed By:</strong> {escape(selected_task["completed_by"] or "-")}</div>
             <label class="small muted">Status</label>
             <select name="status">
-              {''.join(f'<option value="{value}"{" selected" if selected_task["status"] == value else ""}>{label}</option>' for value, label in [("open","Open"),("in_progress","In Progress"),("blocked","Blocked"),("done","Done")])}
+              {"".join(f'<option value="{value}"{" selected" if selected_task["status"] == value else ""}>{label}</option>' for value, label in [("open", "Open"), ("in_progress", "In Progress"), ("blocked", "Blocked"), ("done", "Done")])}
             </select>
             <label class="small muted">Comments</label>
-            <textarea name="comments">{escape(selected_task['comments'])}</textarea>
+            <textarea name="comments">{escape(selected_task["comments"])}</textarea>
             <div style="display:flex;gap:10px;align-items:center;">
               <button type="submit">Save</button>
-              <a class="btn btn-secondary" href="/project/{project['id']}?tab=tasks&status={current_status}">Close</a>
+              <a class="btn btn-secondary" href="/project/{project["id"]}?tab=tasks&status={current_status}">Close</a>
             </div>
           </form>
-          <form method="post" action="/project/{project['id']}/tasks/delete" style="margin-top:12px;">
-            <input type="hidden" name="task_id" value="{escape(selected_task['task_id'])}">
+          <form method="post" action="/project/{project["id"]}/tasks/delete" style="margin-top:12px;">
+            <input type="hidden" name="task_id" value="{escape(selected_task["task_id"])}">
             <input type="hidden" name="tab" value="tasks">
             <input type="hidden" name="status_filter" value="{escape(current_status)}">
             <button type="submit" class="btn btn-secondary danger">Delete</button>
@@ -1021,7 +1142,7 @@ def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, s
     return f"""
       <div class="stack">
         <div class="card" style="padding:16px;">
-          <form method="post" action="/project/{project['id']}/tasks/manual" class="stack">
+          <form method="post" action="/project/{project["id"]}/tasks/manual" class="stack">
             <input type="hidden" name="tab" value="tasks">
             <input type="hidden" name="status_filter" value="{escape(current_status)}">
             <input name="description" placeholder="Add a manual task...">
@@ -1029,7 +1150,7 @@ def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, s
             <div><button type="submit">Add Task</button></div>
           </form>
         </div>
-        {f'<div class="small muted">{escape(message)}</div>' if message else ''}
+        {f'<div class="small muted">{escape(message)}</div>' if message else ""}
         <div class="tabs">{filter_links}</div>
         <div class="card table-responsive">
           <table class="table">
@@ -1042,34 +1163,51 @@ def render_tasks_tab(project: dict[str, object], selected_task_id: str | None, s
     """
 
 
-def render_interactions_tab(project: dict[str, object], selected_interaction_id: str | None, message: str = "") -> str:
+def render_interactions_tab(
+    project: dict[str, object], selected_interaction_id: str | None, message: str = ""
+) -> str:
     interactions = fetch_project_interactions(int(project["id"]))
-    selected = next((item for item in interactions if item["interaction_id"] == selected_interaction_id), None)
-    rows = "".join(
-        f"""
+    selected = next(
+        (
+            item
+            for item in interactions
+            if item["interaction_id"] == selected_interaction_id
+        ),
+        None,
+    )
+    rows = (
+        "".join(
+            f"""
         <tr>
-          <td class="small muted">{escape(item['timestamp'])}</td>
-          <td><a class="btn-link" href="/project/{project['id']}?tab=interactions&interaction={item['interaction_id']}">{escape(item['summary'])}</a></td>
+          <td class="small muted">{escape(item["timestamp"])}</td>
+          <td><a class="btn-link" href="/project/{project["id"]}?tab=interactions&interaction={item["interaction_id"]}">{escape(item["summary"])}</a></td>
         </tr>
         """
-        for item in interactions
-    ) or '<tr><td colspan="2" class="muted">No interactions recorded yet.</td></tr>'
-    raw_view = '<div class="muted">Click an interaction to view the full raw content.</div>'
+            for item in interactions
+        )
+        or '<tr><td colspan="2" class="muted">No interactions recorded yet.</td></tr>'
+    )
+    raw_view = (
+        '<div class="muted">Click an interaction to view the full raw content.</div>'
+    )
     if selected:
         raw_view = f"""
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span class="small muted">{escape(selected['timestamp'])}</span>
-            <a class="btn-link" href="/project/{project['id']}?tab=interactions">Close</a>
+            <span class="small muted">{escape(selected["timestamp"])}</span>
+            <a class="btn-link" href="/project/{project["id"]}?tab=interactions">Close</a>
           </div>
-          <div class="pre">{nl_to_br(selected['content'])}</div>
+          <div class="pre">{nl_to_br(selected["content"])}</div>
         """
-    history = "".join(
-        f'<div class="small" style="margin-bottom:12px;"><div class="muted">{escape(item["timestamp"])}</div><div>{escape(item["summary"])}</div></div>'
-        for item in interactions
-    ) or '<div class="muted">No interactions recorded yet.</div>'
+    history = (
+        "".join(
+            f'<div class="small" style="margin-bottom:12px;"><div class="muted">{escape(item["timestamp"])}</div><div>{escape(item["summary"])}</div></div>'
+            for item in interactions
+        )
+        or '<div class="muted">No interactions recorded yet.</div>'
+    )
     return f"""
       <div class="stack">
-        {f'<div class="small muted">{escape(message)}</div>' if message else ''}
+        {f'<div class="small muted">{escape(message)}</div>' if message else ""}
         <div class="card table-responsive">
           <table class="table">
             <thead><tr><th>Date</th><th>Summary</th></tr></thead>
@@ -1078,8 +1216,8 @@ def render_interactions_tab(project: dict[str, object], selected_interaction_id:
         </div>
         <div class="card" style="padding:16px;">{raw_view}</div>
         <div class="card" style="padding:16px;">
-          <h3 style="margin-top:0;color:{COLORS['primary']};font-size:1rem;">Interaction History</h3>
-          <form method="post" action="/project/{project['id']}/interactions/add" class="stack">
+          <h3 style="margin-top:0;color:{COLORS["primary"]};font-size:1rem;">Interaction History</h3>
+          <form method="post" action="/project/{project["id"]}/interactions/add" class="stack">
             <input type="hidden" name="tab" value="interactions">
             <textarea name="content" placeholder="Paste an email or meeting note here..."></textarea>
             <div><button type="submit">Add Interaction</button></div>
@@ -1096,29 +1234,39 @@ def render_details_tab(project: dict[str, object]) -> str:
     return f"""
       <div class="grid-2">
         <div class="card" style="padding:20px;">
-          <h3 style="margin-top:0;color:{COLORS['primary']};font-size:1rem;">The Problem Submission</h3>
-          <div class="pre">{nl_to_br(str(project['full_problem']))}</div>
+          <h3 style="margin-top:0;color:{COLORS["primary"]};font-size:1rem;">The Problem Submission</h3>
+          <div class="pre">{nl_to_br(str(project["full_problem"]))}</div>
           <hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb;">
-          <h3 style="margin-top:0;color:{COLORS['primary']};font-size:1rem;">8-Week Success Metric</h3>
-          <div class="pre">{nl_to_br(str(project['full_success']))}</div>
+          <h3 style="margin-top:0;color:{COLORS["primary"]};font-size:1rem;">8-Week Success Metric</h3>
+          <div class="pre">{nl_to_br(str(project["full_success"]))}</div>
         </div>
         <div class="card" style="padding:20px;">
-          <h3 style="margin-top:0;color:{COLORS['primary']};font-size:1rem;">Lab Contact Card</h3>
-          <div class="small muted">Team Lead</div><div style="margin-bottom:10px;"><strong>{escape(str(project['lead']))}</strong></div>
-          <div class="small muted">Lead Email</div><div style="margin-bottom:10px;">{escape(str(project['lead_email']))}</div>
-          <div class="small muted">Mentor Team</div><div style="margin-bottom:10px;white-space:pre-wrap;color:{COLORS['primary']};"><strong>{mentor_html}</strong></div>
-          <div class="small muted">Support Requested</div><div style="margin-bottom:10px;">{escape(str(project['support']))}</div>
-          <div class="small muted">Team Composition</div><div style="margin-bottom:10px;">{escape(str(project['team_composition']))}</div>
+          <h3 style="margin-top:0;color:{COLORS["primary"]};font-size:1rem;">Lab Contact Card</h3>
+          <div class="small muted">Team Lead</div><div style="margin-bottom:10px;"><strong>{escape(str(project["lead"]))}</strong></div>
+          <div class="small muted">Lead Email</div><div style="margin-bottom:10px;">{escape(str(project["lead_email"]))}</div>
+          <div class="small muted">Mentor Team</div><div style="margin-bottom:10px;white-space:pre-wrap;color:{COLORS["primary"]};"><strong>{mentor_html}</strong></div>
+          <div class="small muted">Support Requested</div><div style="margin-bottom:10px;">{escape(str(project["support"]))}</div>
+          <div class="small muted">Team Composition</div><div style="margin-bottom:10px;">{escape(str(project["team_composition"]))}</div>
           <div class="small muted">Participant Emails</div><ul>{emails}</ul>
         </div>
       </div>
     """
 
 
-def render_project_page(project_id: int, tab: str = "tasks", selected_task_id: str | None = None, selected_interaction_id: str | None = None, task_status: str = "open", message: str = "") -> str:
+def render_project_page(
+    project_id: int,
+    tab: str = "tasks",
+    selected_task_id: str | None = None,
+    selected_interaction_id: str | None = None,
+    task_status: str = "open",
+    message: str = "",
+) -> str:
     project = fetch_project(project_id)
     if not project:
-        return base_html("Not Found", '<div class="card" style="padding:20px;">Project not found.</div>')
+        return base_html(
+            "Not Found",
+            '<div class="card" style="padding:20px;">Project not found.</div>',
+        )
     if tab == "interactions":
         tab_content = render_interactions_tab(project, selected_interaction_id, message)
     elif tab == "details":
@@ -1128,8 +1276,8 @@ def render_project_page(project_id: int, tab: str = "tasks", selected_task_id: s
         tab_content = render_tasks_tab(project, selected_task_id, task_status, message)
     body = f"""
       <a class="btn btn-secondary" href="/">Back to dashboard</a>
-      <h1 style="color:{COLORS['primary']};margin:18px 0 6px;">{escape(str(project['name']))}</h1>
-      <p class="muted" style="margin-top:0;">{escape(str(project['summary']))}</p>
+      <h1 style="color:{COLORS["primary"]};margin:18px 0 6px;">{escape(str(project["name"]))}</h1>
+      <p class="muted" style="margin-top:0;">{escape(str(project["summary"]))}</p>
       {project_tabs(project_id, tab)}
       {tab_content}
     """
@@ -1138,8 +1286,12 @@ def render_project_page(project_id: int, tab: str = "tasks", selected_task_id: s
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # type: ignore[assignment]
-app.config["SECRET_KEY"] = clean_text(os.getenv("FLASK_SECRET_KEY", "")) or str(uuid.uuid4())
-app.config["SESSION_COOKIE_SECURE"] = clean_text(os.getenv("FLASK_ENV", "")).lower() != "development"
+app.config["SECRET_KEY"] = clean_text(os.getenv("FLASK_SECRET_KEY", "")) or str(
+    uuid.uuid4()
+)
+app.config["SESSION_COOKIE_SECURE"] = (
+    clean_text(os.getenv("FLASK_ENV", "")).lower() != "development"
+)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 server = app
@@ -1148,10 +1300,10 @@ server = app
 def render_login_page(error_message: str = "") -> str:
     body = f"""
       <div class="card" style="max-width:640px;margin:48px auto;padding:28px;">
-        <h2 style="margin-top:0;color:{COLORS['primary']};">Sign in with Azure</h2>
+        <h2 style="margin-top:0;color:{COLORS["primary"]};">Sign in with Azure</h2>
         <p class="muted">Use your London Business School Microsoft account to access the dashboard.</p>
         <p class="small muted">Only approved email addresses can sign in.</p>
-        {f'<div class="small danger" style="margin:12px 0;">{escape(error_message)}</div>' if error_message else ''}
+        {f'<div class="small danger" style="margin:12px 0;">{escape(error_message)}</div>' if error_message else ""}
         <a class="btn" href="{url_for("login")}">Continue with Microsoft</a>
       </div>
     """
@@ -1196,7 +1348,9 @@ def auth_callback():
         return redirect(url_for("home"))
     flow = session.get("auth_flow")
     if not flow:
-        return render_login_page("Your session expired before Microsoft completed sign-in. Please try again.")
+        return render_login_page(
+            "Your session expired before Microsoft completed sign-in. Please try again."
+        )
     try:
         result = build_msal_app().acquire_token_by_auth_code_flow(flow, request.args)
     except RuntimeError as exc:
@@ -1204,18 +1358,26 @@ def auth_callback():
         return render_login_page(str(exc))
     except ValueError:
         session.pop("auth_flow", None)
-        return render_login_page("Azure sign-in could not be completed. Please try again.")
+        return render_login_page(
+            "Azure sign-in could not be completed. Please try again."
+        )
     session.pop("auth_flow", None)
     if "error" in result:
-        return render_login_page(result.get("error_description", "Azure sign-in failed."))
+        return render_login_page(
+            result.get("error_description", "Azure sign-in failed.")
+        )
     claims = result.get("id_token_claims") or {}
     email, name = extract_user_identity(claims)
     allowed_emails = parse_allowed_emails()
     if not email or email not in allowed_emails:
         session.clear()
-        return render_login_page("Your account is not on the allowed access list for this dashboard.")
+        return render_login_page(
+            "Your account is not on the allowed access list for this dashboard."
+        )
     session["user"] = {"email": email, "name": name}
-    redirect_target = clean_text(session.pop("post_login_redirect", "")) or url_for("home")
+    redirect_target = clean_text(session.pop("post_login_redirect", "")) or url_for(
+        "home"
+    )
     return redirect(redirect_target)
 
 
@@ -1268,7 +1430,9 @@ def interaction_add(project_id: int):
         message = "Interaction saved."
     else:
         message = "Paste content into the box before saving."
-    return redirect(f"/project/{project_id}?{urlencode({'tab': 'interactions', 'message': message})}")
+    return redirect(
+        f"/project/{project_id}?{urlencode({'tab': 'interactions', 'message': message})}"
+    )
 
 
 @app.post("/project/<int:project_id>/tasks/manual")
@@ -1282,7 +1446,9 @@ def task_manual(project_id: int):
         message = "Task added."
     else:
         message = "Enter a task description first."
-    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter, 'message': message})}")
+    return redirect(
+        f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter, 'message': message})}"
+    )
 
 
 @app.post("/project/<int:project_id>/tasks/update")
@@ -1298,8 +1464,12 @@ def task_update(project_id: int):
             clean_text(request.form.get("comments", "")),
             current_user_email(),
         )
-        status_filter = new_status if new_status in TASK_STATUS_LABELS else status_filter
-    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter})}")
+        status_filter = (
+            new_status if new_status in TASK_STATUS_LABELS else status_filter
+        )
+    return redirect(
+        f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter})}"
+    )
 
 
 @app.post("/project/<int:project_id>/tasks/delete")
@@ -1309,7 +1479,9 @@ def task_delete(project_id: int):
     status_filter = clean_text(request.form.get("status_filter", "open")) or "open"
     if task_id:
         delete_task(task_id, current_user_email())
-    return redirect(f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter})}")
+    return redirect(
+        f"/project/{project_id}?{urlencode({'tab': 'tasks', 'status': status_filter})}"
+    )
 
 
 if __name__ == "__main__":
